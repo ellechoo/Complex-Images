@@ -5,87 +5,339 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Undersea / Layers of the Network</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
-    --abyss: #0a1218;
-    --deep: #102530;
-    --surface: #16323d;
-    --foam: #e8ecea;
-    --signal: #ff6b4a;
-    --copper: #c9a87c;
-    --kelp: #4a8c7c;
-    --line: rgba(232, 236, 234, 0.12);
-    --mono: 'IBM Plex Mono', 'SF Mono', monospace;
-    --serif: 'Fraunces', Georgia, serif;
+    --bg: #ffffff;
+    --ink: #14181c;
+    --ink-soft: rgba(20, 24, 28, 0.62);
+    --ink-faint: rgba(20, 24, 28, 0.32);
+    --line: rgba(20, 24, 28, 0.10);
+    --accent: #e0532f;
+    --panel-bg: rgba(255, 255, 255, 0.85);
+    --sans: 'Inter', system-ui, sans-serif;
+    --display: 'Inter Tight', 'Inter', system-ui, sans-serif;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
-  body {
-    background: var(--abyss);
-    color: var(--foam);
-    font-family: var(--mono);
+  html, body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
     font-size: 15px;
-    line-height: 1.7;
+    line-height: 1.65;
   }
 
-  .wrap {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    min-height: 100vh;
+  /* Fullscreen fixed canvas */
+  .viz-pane {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    background: var(--bg);
+    z-index: 1;
   }
 
-  /* LEFT: scrolling narrative */
-  .story {
-    padding: 0 6vw;
-    z-index: 2;
+  .viz-pane canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: grab;
   }
 
-  .intro {
-    min-height: 100vh;
+  .viz-pane canvas.dragging {
+    cursor: grabbing;
+  }
+
+  /* Scroll driver — invisible tall spacer that produces scroll height
+     for stepping through layers. 7 steps: intro + 5 layers + outro. */
+  .scroll-driver {
+    position: relative;
+    height: 500vh;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  /* TOP RIGHT GROUP — description panel (left) + layers HUD (right),
+     placed in a row so they naturally share the same height */
+  .top-right-group {
+    position: fixed;
+    top: 1.5rem;
+    right: 1.5rem;
+    display: flex;
+    align-items: stretch;
+    gap: 1rem;
+    z-index: 5;
+  }
+
+  /* LAYERS HUD */
+  .layer-hud {
     display: flex;
     flex-direction: column;
-    justify-content: center;
-    border-bottom: 1px solid var(--line);
+    gap: 0.55rem;
+    align-items: flex-end;
   }
 
-  .intro .eyebrow {
-    color: var(--copper);
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    font-size: 11px;
-    margin-bottom: 1.5rem;
-  }
-
-  .intro h1 {
-    font-family: var(--serif);
+  .layer-hud .hud-title {
+    font-size: 10px;
     font-weight: 600;
-    font-size: clamp(2.5rem, 6vw, 4.5rem);
-    line-height: 1.05;
-    margin-bottom: 1.5rem;
-    letter-spacing: -0.01em;
-  }
-
-  .intro h1 em {
-    font-style: italic;
-    color: var(--signal);
-  }
-
-  .intro p {
-    max-width: 38ch;
-    color: rgba(232,236,234,0.7);
-    font-size: 16px;
-  }
-
-  .scroll-hint {
-    margin-top: 3rem;
-    font-size: 11px;
-    letter-spacing: 0.15em;
+    letter-spacing: 0.18em;
     text-transform: uppercase;
-    color: rgba(232,236,234,0.4);
+    color: var(--ink-faint);
+    margin-bottom: 0.2rem;
+  }
+
+  .layer-hud .layer-row {
     display: flex;
     align-items: center;
     gap: 0.6rem;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: color 0.2s ease;
+    user-select: none;
+  }
+
+  .layer-hud .layer-row:hover {
+    color: var(--ink);
+  }
+
+  .layer-hud .layer-row.active {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  .layer-hud .ring {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 1.5px solid var(--ink-faint);
+    background: transparent;
+    transition: background 0.35s ease, border-color 0.35s ease, transform 0.25s ease;
+    flex-shrink: 0;
+  }
+
+  .layer-hud .layer-row.active .ring {
+    background: var(--ink);
+    border-color: var(--ink);
+    transform: scale(1.05);
+  }
+
+  /* DESCRIPTION PANEL — sits to the left of the Layers HUD, same height (flex stretch) */
+  .desc-panel {
+    width: 280px;
+    background: var(--panel-bg);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 1rem 1.2rem;
+    backdrop-filter: blur(6px);
+    position: relative;
+  }
+
+  .desc-panel .desc-item {
+    position: absolute;
+    top: 1rem;
+    left: 1.2rem;
+    right: 1.2rem;
+    bottom: 1rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+    pointer-events: none;
+  }
+
+  .desc-panel .desc-item.active {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .desc-panel .desc-item h3 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 15px;
+    margin-bottom: 0.5rem;
+    letter-spacing: -0.01em;
+  }
+
+  .desc-panel .desc-item p {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+  }
+
+  /* OWNERSHIP LEGEND — bottom left, collapsible */
+  .legend-panel {
+    position: fixed;
+    bottom: 1.5rem;
+    left: 1.5rem;
+    background: var(--panel-bg);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 11px;
+    max-width: 220px;
+    backdrop-filter: blur(6px);
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.4s ease, transform 0.4s ease;
+    pointer-events: none;
+    z-index: 5;
+    overflow: hidden;
+  }
+
+  .legend-panel.visible {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  .legend-panel .legend-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.7rem 1rem;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .legend-panel .legend-title {
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--ink-faint);
+  }
+
+  .legend-panel .legend-toggle {
+    font-size: 12px;
+    color: var(--ink-faint);
+    transition: transform 0.3s ease;
+    line-height: 1;
+  }
+
+  .legend-panel.collapsed .legend-toggle {
+    transform: rotate(-90deg);
+  }
+
+  .legend-panel .legend-body {
+    padding: 0 1rem 0.8rem 1rem;
+    max-height: 260px;
+    overflow: hidden;
+    transition: max-height 0.35s ease, padding 0.35s ease;
+  }
+
+  .legend-panel.collapsed .legend-body {
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+
+  .legend-panel .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.35rem;
+    color: var(--ink-soft);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .legend-panel .legend-item .swatch {
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* HOVER TOOLTIP */
+  .tooltip {
+    position: fixed;
+    pointer-events: none;
+    background: rgba(20, 24, 28, 0.92);
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    font-size: 12px;
+    color: #fff;
+    max-width: 240px;
+    z-index: 10;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+    transform: translate(-50%, calc(-100% - 12px));
+  }
+
+  .tooltip.visible {
+    opacity: 1;
+  }
+
+  .tooltip .t-name {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 13px;
+    margin-bottom: 0.2rem;
+  }
+
+  .tooltip .t-owner {
+    color: rgba(255,255,255,0.65);
+    font-size: 11px;
+  }
+
+  /* ZOOM CONTROLS */
+  .zoom-controls {
+    position: fixed;
+    bottom: 1.5rem;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: row;
+    gap: 0.4rem;
+    z-index: 5;
+  }
+
+  .zoom-controls button {
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: var(--panel-bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    cursor: pointer;
+    backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s ease, border-color 0.2s ease;
+  }
+
+  .zoom-controls button:hover {
+    background: rgba(20,24,28,0.06);
+    border-color: rgba(20,24,28,0.2);
+  }
+
+  .zoom-controls button svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  /* scroll hint, shown only during intro */
+  .scroll-hint {
+    position: fixed;
+    bottom: 1.5rem;
+    right: 1.5rem;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    z-index: 5;
+    transition: opacity 0.5s ease;
   }
 
   .scroll-hint .arrow {
@@ -98,351 +350,320 @@
     50% { transform: translateY(4px); }
   }
 
-  .section {
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    border-bottom: 1px solid var(--line);
-    transition: opacity 0.4s ease;
-  }
-
-  .section.faded { opacity: 0.25; }
-
-  .section .tag {
-    font-size: 11px;
-    letter-spacing: 0.2em;
-    text-transform: uppercase;
-    margin-bottom: 1rem;
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-  }
-
-  .section .tag .swatch {
-    width: 10px; height: 10px;
-    border-radius: 50%;
-    display: inline-block;
-    flex-shrink: 0;
-  }
-
-  .section h2 {
-    font-family: var(--serif);
-    font-weight: 600;
-    font-size: clamp(1.8rem, 4vw, 2.8rem);
-    margin-bottom: 1rem;
-    line-height: 1.15;
-  }
-
-  .section p {
-    max-width: 42ch;
-    color: rgba(232,236,234,0.7);
-    font-size: 15px;
-  }
-
-  .section .layer-status {
-    margin-top: 1.5rem;
-    font-size: 11px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--kelp);
-  }
-
-  .outro {
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-  }
-
-  .outro h2 {
-    font-family: var(--serif);
-    font-weight: 600;
-    font-size: clamp(2rem, 5vw, 3.2rem);
-    margin-bottom: 1rem;
-  }
-
-  .outro p {
-    max-width: 42ch;
-    color: rgba(232,236,234,0.7);
-  }
-
-  .legend {
-    margin-top: 2rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.6rem;
-    font-size: 12px;
-  }
-
-  .legend .item {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    color: rgba(232,236,234,0.6);
-  }
-
-  .legend .swatch {
-    width: 10px; height: 10px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
-  /* RIGHT: sticky visualization */
-  .viz-pane {
-    position: sticky;
-    top: 0;
-    height: 100vh;
-    border-left: 1px solid var(--line);
-    overflow: hidden;
-    background:
-      radial-gradient(ellipse at 70% 30%, rgba(74,140,124,0.08), transparent 60%),
-      var(--deep);
-  }
-
-  .viz-pane canvas {
-    display: block;
-    width: 100%;
-    height: 100%;
-  }
-
-  .hud {
-    position: absolute;
-    top: 2rem;
-    left: 2rem;
-    right: 2rem;
-    display: flex;
-    justify-content: space-between;
-    font-size: 11px;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    color: rgba(232,236,234,0.4);
-    pointer-events: none;
-  }
-
-  .hud .layers-on {
-    text-align: right;
-  }
-
-  .hud .layers-on span {
-    display: block;
-    color: var(--foam);
-    margin-top: 0.3rem;
-    transition: opacity 0.3s ease;
-  }
-
-  .hud .layers-on span.off {
-    opacity: 0.15;
-  }
-
-  /* progress rail */
-  .rail {
-    position: absolute;
-    bottom: 2rem;
-    left: 2rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .rail .dot {
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: rgba(232,236,234,0.15);
-    transition: all 0.3s ease;
-  }
-
-  .rail .dot.active {
-    background: var(--signal);
-    transform: scale(1.4);
-  }
-
   @media (max-width: 880px) {
-    .wrap { grid-template-columns: 1fr; }
-    .viz-pane {
-      position: relative;
-      height: 60vh;
-      order: -1;
+    .desc-panel {
+      display: none;
     }
-    .story { padding: 0 6vw; }
+    .legend-panel { max-width: 160px; font-size: 10px; }
   }
 </style>
 </head>
 <body>
 
-<div class="wrap">
+<div class="scroll-driver"></div>
 
-  <!-- LEFT: NARRATIVE / SCROLL SECTIONS -->
-  <div class="story">
+<div class="viz-pane">
+  <canvas id="viz"></canvas>
+</div>
 
-    <div class="intro">
-      <div class="eyebrow">An undersea infrastructure study</div>
-      <h1>Beneath every<br><em>click</em>, a cable.</h1>
-      <p>Roughly 500 submarine cables carry nearly all intercontinental internet traffic. This is a layered look at who owns them, when they were built, and how they connect — scroll to add layers, scroll back to remove them.</p>
-      <div class="scroll-hint"><span class="arrow">↓</span> scroll to begin</div>
+<div class="scroll-hint" id="scroll-hint"><span class="arrow">↓</span> scroll</div>
+
+<div class="top-right-group">
+  <div class="desc-panel" id="desc-panel">
+    <div class="desc-item" data-l="base">
+      <h3>Network</h3>
+      <p>Each node is a cable. Hover any node to see its name. Right now they're arranged by nothing but their own connections.</p>
     </div>
-
-    <div class="section" data-layer="base">
-      <div class="tag"><span class="swatch" style="background:var(--copper)"></span>Layer 01 — The Network</div>
-      <h2>495 cables.<br>An unseen mesh.</h2>
-      <p>Each node here is a cable. Right now they're arranged by nothing but their own connections — a raw skeleton of the system, before ownership, age, or geography are added back in.</p>
-      <div class="layer-status">base layer always visible</div>
+    <div class="desc-item" data-l="owner">
+      <h3>Ownership</h3>
+      <p>Color now encodes the primary owner. Watch for clusters of state-backed telecoms, Big Tech, and legacy carriers.</p>
     </div>
-
-    <div class="section" data-layer="owner">
-      <div class="tag"><span class="swatch" style="background:var(--signal)"></span>Layer 02 — Ownership</div>
-      <h2>A handful of names<br>own the ocean floor.</h2>
-      <p>Color now encodes the primary owner or consortium. Watch for clusters: state-backed telecoms, the Big Tech players (Google, Meta, Amazon, Microsoft), and the legacy carriers — each forms its own constellation.</p>
-      <div class="layer-status">+ ownership color added</div>
+    <div class="desc-item" data-l="age">
+      <h3>Age</h3>
+      <p>Node size now reflects age — older cables grow larger and drift outward, recent builds stay small and tight to center.</p>
     </div>
-
-    <div class="section" data-layer="age">
-      <div class="tag"><span class="swatch" style="background:var(--kelp)"></span>Layer 03 — Age</div>
-      <h2>Some of this wiring<br>predates the iPhone.<br>By decades.</h2>
-      <p>Node size now reflects age — older cables (some from the 1990s, still in service) grow larger and drift outward, while recent builds stay small and tight to center. The network has rings, like a tree.</p>
-      <div class="layer-status">+ age-based sizing added</div>
+    <div class="desc-item" data-l="length">
+      <h3>Length</h3>
+      <p>Connection lines vary in thickness and brightness by cable length — the longest routes are most visible.</p>
     </div>
-
-    <div class="section" data-layer="length">
-      <div class="tag"><span class="swatch" style="background:#8b7fd6"></span>Layer 04 — Length &amp; Reach</div>
-      <h2>Some span an ocean.<br>Some span a strait.</h2>
-      <p>Connection lines now vary in thickness and brightness by cable length — the longest intercontinental routes glow brightest, while short regional links stay faint. Scale becomes visible, without a map.</p>
-      <div class="layer-status">+ length-weighted links added</div>
+    <div class="desc-item" data-l="fragility">
+      <h3>Fragility</h3>
+      <p>Pulsing rings mark cables with a history of faults or repairs — anchor drags, seismic activity, sabotage.</p>
     </div>
-
-    <div class="section" data-layer="fragility">
-      <div class="tag"><span class="swatch" style="background:#ffd166"></span>Layer 05 — Fragility</div>
-      <h2>Every cable can break.<br>Most eventually do.</h2>
-      <p>Pulsing nodes mark cables with a known history of faults or repairs — anchor drags, seismic activity, sabotage. The pulse rate is illustrative here, but built to carry real incident data.</p>
-      <div class="layer-status">+ fragility markers added</div>
-    </div>
-
-    <div class="outro">
-      <h2>All five layers,<br>at once.</h2>
-      <p>Ownership, age, reach, and risk — overlapping, the way they actually do in the world. No single layer tells the whole story. The complexity is the point.</p>
-      <div class="legend">
-        <div class="item"><span class="swatch" style="background:var(--copper)"></span>Base connections</div>
-        <div class="item"><span class="swatch" style="background:var(--signal)"></span>Ownership clusters</div>
-        <div class="item"><span class="swatch" style="background:var(--kelp)"></span>Age (size)</div>
-        <div class="item"><span class="swatch" style="background:#8b7fd6"></span>Length (link weight)</div>
-        <div class="item"><span class="swatch" style="background:#ffd166"></span>Fragility (pulse)</div>
-      </div>
-    </div>
-
-  </div>
-
-  <!-- RIGHT: STICKY VISUALIZATION -->
-  <div class="viz-pane">
-    <canvas id="viz"></canvas>
-    <div class="hud">
-      <div>Cable Network<br>Prototype Data</div>
-      <div class="layers-on">
-        Active layers
-        <span data-l="base">Base</span>
-        <span data-l="owner" class="off">Ownership</span>
-        <span data-l="age" class="off">Age</span>
-        <span data-l="length" class="off">Length</span>
-        <span data-l="fragility" class="off">Fragility</span>
-      </div>
-    </div>
-    <div class="rail">
-      <div class="dot active"></div>
-      <div class="dot"></div>
-      <div class="dot"></div>
-      <div class="dot"></div>
-      <div class="dot"></div>
-      <div class="dot"></div>
-      <div class="dot"></div>
+    <div class="desc-item" data-l="all">
+      <h3>All layers, at once</h3>
+      <p>Ownership, age, reach, and risk — overlapping, the way they actually do in the world. The complexity is the point.</p>
     </div>
   </div>
 
+  <div class="layer-hud" id="layer-hud">
+    <div class="hud-title">Layers</div>
+    <div class="layer-row" data-l="base"><span class="ring"></span>Network</div>
+    <div class="layer-row" data-l="owner"><span class="ring"></span>Ownership</div>
+    <div class="layer-row" data-l="age"><span class="ring"></span>Age</div>
+    <div class="layer-row" data-l="length"><span class="ring"></span>Length</div>
+    <div class="layer-row" data-l="fragility"><span class="ring"></span>Fragility</div>
+  </div>
+</div>
+
+<div class="zoom-controls">
+  <button id="zoom-out" title="Zoom out">−</button>
+  <button id="zoom-reset" title="Reset view (or double-click canvas)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+      <path d="M3 3v5h5"/>
+    </svg>
+  </button>
+  <button id="zoom-in" title="Zoom in">+</button>
+</div>
+
+<div class="legend-panel" id="legend-panel">
+  <div class="legend-header" id="legend-header">
+    <div class="legend-title">Ownership</div>
+    <div class="legend-toggle">▾</div>
+  </div>
+  <div class="legend-body">
+    <div id="legend-items"></div>
+  </div>
+</div>
+
+<div class="tooltip" id="tooltip">
+  <div class="t-name" id="tooltip-name"></div>
+  <div class="t-owner" id="tooltip-owner"></div>
 </div>
 
 <script>
-// ---------------------------------------------------------
-// CANVAS SETUP (can run immediately, doesn't need data)
-// ---------------------------------------------------------
 const canvas = document.getElementById('viz');
 const ctx = canvas.getContext('2d');
-let W, H, CX, CY;
+const tooltip = document.getElementById('tooltip');
+const tooltipName = document.getElementById('tooltip-name');
+const tooltipOwner = document.getElementById('tooltip-owner');
+const legendPanel = document.getElementById('legend-panel');
+const legendItems = document.getElementById('legend-items');
+const legendHeader = document.getElementById('legend-header');
+const scrollHint = document.getElementById('scroll-hint');
+const descItems = document.querySelectorAll('.desc-item');
+
+let dims = { w: 0, h: 0 };
 
 function resize() {
-  const rect = canvas.parentElement.getBoundingClientRect();
-  W = canvas.width = rect.width * devicePixelRatio;
-  H = canvas.height = rect.height * devicePixelRatio;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * devicePixelRatio;
+  canvas.height = rect.height * devicePixelRatio;
   canvas.style.width = rect.width + 'px';
   canvas.style.height = rect.height + 'px';
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.scale(devicePixelRatio, devicePixelRatio);
-  CX = rect.width / 2;
-  CY = rect.height / 2;
-  return { w: rect.width, h: rect.height };
+  dims = { w: rect.width, h: rect.height };
 }
-let dims = resize();
-window.addEventListener('resize', () => {
-  ctx.setTransform(1,0,0,1,0,0);
-  dims = resize();
+resize();
+window.addEventListener('resize', resize);
+
+// ---------------------------------------------------------
+// PAN / ZOOM STATE — with smooth animated transitions
+// ---------------------------------------------------------
+// Default zoom starts slightly more zoomed in (~ two zoom-in clicks),
+// centered on the viewport so the visualization fills more of the screen.
+const DEFAULT_SCALE = 1.69; // ~1.3^2
+const view = { x: 0, y: 0, scale: DEFAULT_SCALE };
+const viewTarget = { x: 0, y: 0, scale: DEFAULT_SCALE };
+
+function centerView(target) {
+  const cx = dims.w / 2, cy = dims.h / 2;
+  // keep the viewport center fixed while at this scale
+  target.x = cx - cx * target.scale;
+  target.y = cy - cy * target.scale;
+}
+
+let isDragging = false;
+let dragStart = { x: 0, y: 0 };
+let viewStart = { x: 0, y: 0 };
+
+function resetView() {
+  viewTarget.scale = DEFAULT_SCALE;
+  centerView(viewTarget);
+}
+
+// initialize view to the default centered/zoomed position
+centerView(view);
+centerView(viewTarget);
+
+canvas.addEventListener('mousedown', (e) => {
+  isDragging = true;
+  canvas.classList.add('dragging');
+  dragStart = { x: e.clientX, y: e.clientY };
+  viewStart = { x: view.x, y: view.y };
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (isDragging) {
+    view.x = viewStart.x + (e.clientX - dragStart.x);
+    view.y = viewStart.y + (e.clientY - dragStart.y);
+    viewTarget.x = view.x;
+    viewTarget.y = view.y;
+  }
+  updateHover(e);
+});
+
+window.addEventListener('mouseup', () => {
+  isDragging = false;
+  canvas.classList.remove('dragging');
+});
+
+// Pinch gestures only (ctrlKey wheel events) zoom; normal scroll drives the page.
+canvas.addEventListener('wheel', (e) => {
+  if (!e.ctrlKey) return;
+
+  e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const mouseX = e.clientX - rect.left;
+  const mouseY = e.clientY - rect.top;
+
+  const zoomFactor = Math.exp(-e.deltaY * 0.01);
+  const newScale = Math.min(Math.max(viewTarget.scale * zoomFactor, 0.3), 6);
+
+  const worldX = (mouseX - viewTarget.x) / viewTarget.scale;
+  const worldY = (mouseY - viewTarget.y) / viewTarget.scale;
+  viewTarget.x = mouseX - worldX * newScale;
+  viewTarget.y = mouseY - worldY * newScale;
+  viewTarget.scale = newScale;
+}, { passive: false });
+
+canvas.addEventListener('dblclick', resetView);
+document.getElementById('zoom-reset').addEventListener('click', resetView);
+
+function zoomByFactor(factor) {
+  const cx = dims.w / 2, cy = dims.h / 2;
+  const newScale = Math.min(Math.max(viewTarget.scale * factor, 0.3), 6);
+  const worldX = (cx - viewTarget.x) / viewTarget.scale;
+  const worldY = (cy - viewTarget.y) / viewTarget.scale;
+  viewTarget.x = cx - worldX * newScale;
+  viewTarget.y = cy - worldY * newScale;
+  viewTarget.scale = newScale;
+}
+
+document.getElementById('zoom-in').addEventListener('click', () => zoomByFactor(1.3));
+document.getElementById('zoom-out').addEventListener('click', () => zoomByFactor(1/1.3));
+
+// ---------------------------------------------------------
+// LEGEND COLLAPSE
+// ---------------------------------------------------------
+legendHeader.addEventListener('click', () => {
+  legendPanel.classList.toggle('collapsed');
 });
 
 // ---------------------------------------------------------
-// LAYER STATE — driven by scroll
+// LAYER STATE — driven by scroll position (discrete steps)
 // ---------------------------------------------------------
 const layerState = { base: true, owner: false, age: false, length: false, fragility: false };
 const layerOrder = ['base', 'owner', 'age', 'length', 'fragility'];
 
+// Each layer tracks the timestamp of its last state change (on or off)
+// and which direction it was heading, so we can animate both appearance
+// and disappearance.
+const layerTransition = {
+  base:      { since: performance.now(), from: 0, to: 1 },
+  owner:     { since: null, from: 0, to: 0 },
+  age:       { since: null, from: 0, to: 0 },
+  length:    { since: null, from: 0, to: 0 },
+  fragility: { since: null, from: 0, to: 0 }
+};
+
 function setLayer(name, on) {
+  const wasOn = layerState[name];
+  if (on === wasOn) return;
   layerState[name] = on;
-  document.querySelectorAll('.hud .layers-on span').forEach(el => {
+
+  const trans = layerTransition[name];
+  // compute current eased value as the new "from", so reversing mid-animation is smooth
+  const currentVal = currentLayerValue(name);
+  trans.from = currentVal;
+  trans.to = on ? 1 : 0;
+  trans.since = performance.now();
+
+  document.querySelectorAll('.layer-hud .layer-row').forEach(el => {
     const l = el.getAttribute('data-l');
-    el.classList.toggle('off', !layerState[l]);
+    el.classList.toggle('active', !!layerState[l]);
   });
+  legendPanel.classList.toggle('visible', layerState.owner);
+}
+
+function easeInOutCubic(x) {
+  return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+}
+
+// returns current 0..1 "presence" value for a layer, animating between from/to
+function currentLayerValue(name) {
+  const trans = layerTransition[name];
+  if (trans.since === null) return trans.to;
+  const DURATION = 700;
+  const elapsed = performance.now() - trans.since;
+  if (elapsed >= DURATION) return trans.to;
+  const t = easeInOutCubic(elapsed / DURATION);
+  return trans.from + (trans.to - trans.from) * t;
 }
 
 // ---------------------------------------------------------
-// SCROLL OBSERVER — toggles layers as sections enter/leave
+// SCROLL → STEP MAPPING
+// 0 = Network only, 1 = +Ownership, 2 = +Age, 3 = +Length, 4 = +Fragility (all on)
 // ---------------------------------------------------------
-const sections = document.querySelectorAll('.section');
-const dots = document.querySelectorAll('.rail .dot');
+const TOTAL_STEPS = 5; // steps 0..4
+let currentStep = 0;
 
-const observer = new IntersectionObserver((entries) => {
-  entries.forEach(entry => {
-    const layer = entry.target.getAttribute('data-layer');
-    if (entry.isIntersecting) {
-      setLayer(layer, true);
-      entry.target.classList.remove('faded');
-    }
+function applyStep(step) {
+  currentStep = step;
+
+  // base/Network is always visible
+  setLayer('base', true);
+
+  // owner, age, length, fragility turn on progressively:
+  // step 1 -> owner on, step 2 -> +age, step 3 -> +length, step 4 -> +fragility
+  const progressiveLayers = ['owner', 'age', 'length', 'fragility'];
+  progressiveLayers.forEach((l, i) => {
+    const shouldBeOn = step > i; // owner at step>0, age at step>1, etc.
+    setLayer(l, shouldBeOn);
   });
-}, { threshold: 0.5 });
 
-sections.forEach(s => observer.observe(s));
+  scrollHint.style.opacity = step === 0 ? '1' : '0';
 
-// when scrolling back up past a section, remove its layer (and later ones)
-let lastScrollY = window.scrollY;
-window.addEventListener('scroll', () => {
-  const dir = window.scrollY > lastScrollY ? 'down' : 'up';
-  lastScrollY = window.scrollY;
+  // description panel: show matching item
+  let activeDesc;
+  if (step === 0) activeDesc = 'base';
+  else if (step >= progressiveLayers.length) activeDesc = 'all';
+  else activeDesc = progressiveLayers[step - 1];
 
-  // figure out which sections are above the viewport midpoint
-  const mid = window.innerHeight / 2;
-  let activeIndex = -1; // -1 = intro, 0..4 = sections, 5 = outro
-  sections.forEach((s, i) => {
-    const r = s.getBoundingClientRect();
-    if (r.top < mid) activeIndex = i;
+  descItems.forEach(el => {
+    el.classList.toggle('active', el.getAttribute('data-l') === activeDesc);
   });
-  const outroRect = document.querySelector('.outro').getBoundingClientRect();
-  const outroActive = outroRect.top < mid;
+}
 
-  if (outroActive) {
-    layerOrder.forEach(l => setLayer(l, true));
-  } else if (activeIndex === -1) {
-    layerOrder.forEach((l, i) => setLayer(l, i === 0));
-  } else {
-    layerOrder.forEach((l, i) => setLayer(l, i <= activeIndex));
-  }
+function recalcStep() {
+  const maxStep = TOTAL_STEPS - 1; // 4
+  const scrollable = document.documentElement.scrollHeight - window.innerHeight;
+  const progress = scrollable > 0 ? window.scrollY / scrollable : 0;
+  const step = Math.min(maxStep, Math.round(progress * maxStep));
+  if (step !== currentStep) applyStep(step);
+}
 
-  // update rail dots
-  let dotIndex = activeIndex === -1 ? 0 : (outroActive ? 6 : activeIndex + 1);
-  dots.forEach((d, i) => d.classList.toggle('active', i === dotIndex));
+window.addEventListener('scroll', recalcStep);
+
+// ---------------------------------------------------------
+// CLICK NAVIGATION — clicking a HUD row scrolls to that step
+// ---------------------------------------------------------
+document.querySelectorAll('.layer-hud .layer-row').forEach((row, idx) => {
+  row.addEventListener('click', () => {
+    // base -> step 0 (network only)
+    // owner -> step 1 (network + ownership)
+    // age -> step 2, length -> step 3, fragility -> step 4 (its final form)
+    const step = idx; // idx 0 = base/Network row -> step 0
+    const scrollable = document.documentElement.scrollHeight - window.innerHeight;
+    const targetY = (step / (TOTAL_STEPS - 1)) * scrollable;
+    window.scrollTo({ top: targetY, behavior: 'smooth' });
+  });
 });
+
+// initialize description panel state
+applyStep(0);
 
 // ---------------------------------------------------------
 // DATA LOADING
@@ -450,26 +671,15 @@ window.addEventListener('scroll', () => {
 let cables = [];
 let links = [];
 
-// A fixed palette to assign to the most common owners.
-// "Other" (everything past the top N) gets a muted shared color.
 const PALETTE = [
-  "#ff6b4a", // signal
-  "#4a8c7c", // kelp
-  "#8b7fd6", // violet
-  "#ffd166", // gold
-  "#5b8cff", // blue
-  "#ff4a9e", // pink
-  "#7fffd4", // aqua
-  "#ffb347", // orange
-  "#c9a87c", // copper
-  "#a3ff7f"  // green
+  "#e0532f", "#2f8f6e", "#6c63d6", "#d6a91f", "#2f6fd6",
+  "#d6477e", "#1f9e9e", "#a8651f", "#7a3fa0", "#4f7a1f"
 ];
-const OTHER_COLOR = "rgba(232,236,234,0.35)";
+const OTHER_COLOR = "#b8bcc0";
 const TOP_N_OWNERS = PALETTE.length;
 
-let OWNER_COLORS = {}; // filled in after data loads
+let OWNER_COLORS = {};
 
-// --- parsing helpers ---
 function parseLength(str) {
   if (!str) return NaN;
   const cleaned = String(str).replace(/,/g, '').replace(/km/i, '').trim();
@@ -497,18 +707,15 @@ Papa.parse('data/cables_summary.csv', {
   complete: (results) => {
     const rows = results.data.filter(r => r.name);
 
-    // --- normalize age from rfs_date ---
     const years = rows.map(r => parseYear(r.rfs_date)).filter(y => !isNaN(y));
     const minYear = Math.min(...years);
     const maxYear = Math.max(...years);
 
-    // --- normalize length ---
     const lengths = rows.map(r => parseLength(r.length)).filter(l => !isNaN(l));
     const minLen = Math.min(...lengths);
     const maxLen = Math.max(...lengths);
-    const avgLenNorm = 0.3; // fallback for missing/planned cables
+    const avgLenNorm = 0.3;
 
-    // --- count owner frequency to build dynamic palette ---
     const ownerCounts = {};
     rows.forEach(r => {
       const primary = (r.owners || '').split(',')[0].trim();
@@ -528,7 +735,6 @@ Papa.parse('data/cables_summary.csv', {
       return OWNER_COLORS[primaryOwner] || OTHER_COLOR;
     }
 
-    // --- build cable objects ---
     cables = rows.map((r, i) => {
       const year = parseYear(r.rfs_date);
       const age = isNaN(year)
@@ -557,15 +763,15 @@ Papa.parse('data/cables_summary.csv', {
         age: age,
         length: lengthNorm,
         isPlanned: r.is_planned === 'True',
-        fragile: Math.random() < 0.18, // placeholder until real fault data exists
+        fragile: Math.random() < 0.18,
         landingTokens: landingTokens,
         angle: (i / rows.length) * Math.PI * 2 + Math.random() * 0.3,
         radiusBase: 0.25 + Math.random() * 0.15,
-        x: 0, y: 0
+        x: 0, y: 0,
+        appearDelay: Math.random() * 500
       };
     });
 
-    // --- build links: connect cables sharing a specific (non-country) landing token ---
     links = [];
     const maxLinks = cables.length * 2;
     outer:
@@ -575,12 +781,17 @@ Papa.parse('data/cables_summary.csv', {
           t && !COMMON_COUNTRIES.has(t) && cables[j].landingTokens.includes(t)
         );
         if (shared) {
-          links.push({ a: i, b: j, length: (cables[i].length + cables[j].length) / 2 });
+          links.push({
+            a: i, b: j,
+            length: (cables[i].length + cables[j].length) / 2,
+            appearDelay: Math.random() * 500
+          });
           if (links.length >= maxLinks) break outer;
         }
       }
     }
 
+    buildLegend();
     initVisualization();
   },
   error: (err) => {
@@ -588,25 +799,43 @@ Papa.parse('data/cables_summary.csv', {
   }
 });
 
+function buildLegend() {
+  legendItems.innerHTML = '';
+  Object.entries(OWNER_COLORS).forEach(([name, color]) => {
+    const item = document.createElement('div');
+    item.className = 'legend-item';
+    item.innerHTML = `<span class="swatch" style="background:${color}"></span>${name}`;
+    legendItems.appendChild(item);
+  });
+  const other = document.createElement('div');
+  other.className = 'legend-item';
+  other.innerHTML = `<span class="swatch" style="background:${OTHER_COLOR}"></span>Other / smaller owners`;
+  legendItems.appendChild(other);
+}
+
 // ---------------------------------------------------------
 // PHYSICS-ISH LAYOUT
+// position blends between "off" and "on" arrangement using the
+// layer's animated presence value, so layout transitions smoothly too.
 // ---------------------------------------------------------
 function targetPosition(c, w, h) {
   const minDim = Math.min(w, h);
   let r = minDim * c.radiusBase;
 
-  if (layerState.age) {
-    r += c.age * minDim * 0.28;
-  }
+  const ageVal = currentLayerValue('age');
+  r += ageVal * c.age * minDim * 0.28;
 
   let angle = c.angle;
-  if (layerState.owner) {
+  const ownerVal = currentLayerValue('owner');
+  if (ownerVal > 0.001) {
     const ownerNames = Object.keys(OWNER_COLORS);
     const idx = ownerNames.indexOf(c.primaryOwner);
-    const groupCount = ownerNames.length + 1; // +1 for "Other" bucket
+    const groupCount = ownerNames.length + 1;
     const groupIndex = idx === -1 ? ownerNames.length : idx;
     const clusterAngle = (groupIndex / groupCount) * Math.PI * 2;
-    angle = clusterAngle + (angle % (Math.PI * 2 / groupCount)) * 0.6;
+    const ownerAngle = clusterAngle + (angle % (Math.PI * 2 / groupCount)) * 0.6;
+    // blend between base angle and owner-clustered angle
+    angle = angle + (ownerAngle - angle) * ownerVal;
   }
 
   const x = w/2 + Math.cos(angle) * r;
@@ -616,18 +845,122 @@ function targetPosition(c, w, h) {
 }
 
 function nodeRadius(c) {
-  let base = 1.6;
-  if (layerState.age) base += c.age * 3.5;
-  return base;
+  const ageVal = currentLayerValue('age');
+  return 1.8 + ageVal * c.age * 3.5;
 }
 
 function nodeColor(c) {
-  if (layerState.owner) return c.ownerColor;
-  return 'rgba(232,236,234,0.55)';
+  const ownerVal = currentLayerValue('owner');
+  if (ownerVal <= 0.001) return 'rgba(20,24,28,0.45)';
+  // blend between neutral and owner color
+  return blendColors('rgba(20,24,28,0.45)', c.ownerColor, ownerVal);
+}
+
+function blendColors(c1, c2, t) {
+  const a = toRGBA(c1);
+  const b = toRGBA(c2);
+  const r = a[0] + (b[0] - a[0]) * t;
+  const g = a[1] + (b[1] - a[1]) * t;
+  const bl = a[2] + (b[2] - a[2]) * t;
+  const al = a[3] + (b[3] - a[3]) * t;
+  return `rgba(${r}, ${g}, ${bl}, ${al})`;
+}
+
+function toRGBA(color) {
+  if (color.startsWith('rgba')) {
+    return color.match(/[\d.]+/g).map(Number);
+  }
+  if (color.startsWith('#')) {
+    return [
+      parseInt(color.slice(1,3), 16),
+      parseInt(color.slice(3,5), 16),
+      parseInt(color.slice(5,7), 16),
+      1
+    ];
+  }
+  return [0,0,0,1];
 }
 
 // ---------------------------------------------------------
-// RENDER LOOP + INIT (only runs once data is loaded)
+// ANIMATION HELPERS for per-element stagger (links, pulses)
+// ---------------------------------------------------------
+function easeOutCubic(x) {
+  return 1 - Math.pow(1 - x, 3);
+}
+
+// staggered progress that follows the layer's overall presence value,
+// but offsets each element's transition by its appearDelay, and works
+// both forward (appearing) and backward (disappearing).
+function staggeredProgress(layerName, extraDelay) {
+  const trans = layerTransition[layerName];
+  const base = currentLayerValue(layerName);
+
+  if (trans.since === null) return base;
+
+  const DURATION = 700;
+  const elapsed = performance.now() - trans.since - extraDelay;
+
+  if (trans.to === 1) {
+    // appearing: delayed start
+    if (elapsed <= 0) return 0;
+    if (elapsed >= DURATION) return 1;
+    return easeOutCubic(elapsed / DURATION);
+  } else {
+    // disappearing: delayed start of fade-out too, staggered
+    if (elapsed <= 0) return 1;
+    if (elapsed >= DURATION) return 0;
+    return 1 - easeOutCubic(elapsed / DURATION);
+  }
+}
+
+// ---------------------------------------------------------
+// HOVER DETECTION
+// ---------------------------------------------------------
+let hoveredCable = null;
+
+function updateHover(e) {
+  const rect = canvas.getBoundingClientRect();
+  const mouseX = e.clientX - rect.left;
+  const mouseY = e.clientY - rect.top;
+
+  if (isDragging || !cables.length) {
+    hoveredCable = null;
+    tooltip.classList.remove('visible');
+    return;
+  }
+
+  let found = null;
+  for (const c of cables) {
+    const screenX = c.x * view.scale + view.x;
+    const screenY = c.y * view.scale + view.y;
+    const r = Math.max(nodeRadius(c) * view.scale, 4);
+    const dx = mouseX - screenX;
+    const dy = mouseY - screenY;
+    if (dx*dx + dy*dy <= r*r) {
+      found = c;
+      break;
+    }
+  }
+
+  hoveredCable = found;
+  if (found) {
+    tooltip.classList.add('visible');
+    tooltip.style.left = (rect.left + mouseX) + 'px';
+    tooltip.style.top = (rect.top + mouseY) + 'px';
+    tooltipName.textContent = found.name;
+    tooltipOwner.textContent = found.owner || 'Owner unknown';
+  } else {
+    tooltip.classList.remove('visible');
+  }
+}
+
+canvas.addEventListener('mouseleave', () => {
+  hoveredCable = null;
+  tooltip.classList.remove('visible');
+});
+
+// ---------------------------------------------------------
+// RENDER LOOP + INIT
 // ---------------------------------------------------------
 function initVisualization() {
   cables.forEach(c => {
@@ -640,29 +973,50 @@ function initVisualization() {
     t += 1;
     ctx.clearRect(0, 0, dims.w, dims.h);
 
+    // ease view toward target (smooth zoom/pan)
+    view.x += (viewTarget.x - view.x) * 0.15;
+    view.y += (viewTarget.y - view.y) * 0.15;
+    view.scale += (viewTarget.scale - view.scale) * 0.15;
+
     cables.forEach(c => {
       const target = targetPosition(c, dims.w, dims.h);
       c.x += (target.x - c.x) * 0.06;
       c.y += (target.y - c.y) * 0.06;
     });
 
-    // LINKS (length layer)
-    if (layerState.length || layerState.base) {
+    ctx.save();
+    ctx.translate(view.x, view.y);
+    ctx.scale(view.scale, view.scale);
+
+    // LINKS
+    const baseVal = currentLayerValue('base');
+    const lengthVal = currentLayerValue('length');
+
+    if (baseVal > 0.001 || lengthVal > 0.001) {
       links.forEach(link => {
         const a = cables[link.a], b = cables[link.b];
-        let alpha = 0.04;
-        let width = 0.4;
-        let color = 'rgba(201,168,124,';
-        if (layerState.length) {
-          alpha = 0.06 + link.length * 0.35;
-          width = 0.4 + link.length * 2.2;
-          color = 'rgba(139,127,214,';
+
+        let alpha, width, color;
+
+        if (lengthVal > 0.001) {
+          const progress = staggeredProgress('length', link.appearDelay);
+          alpha = (0.12 + link.length * 0.5) * progress;
+          width = 0.8 + link.length * 2.6;
+          color = '108,99,214';
+        } else {
+          const progress = staggeredProgress('base', link.appearDelay);
+          alpha = 0.12 * progress;
+          width = 0.8;
+          color = '20,24,28';
         }
+
+        if (alpha <= 0.001) return;
+
         ctx.beginPath();
         ctx.moveTo(a.x, a.y);
         ctx.lineTo(b.x, b.y);
-        ctx.strokeStyle = color + alpha + ')';
-        ctx.lineWidth = width;
+        ctx.strokeStyle = `rgba(${color}, ${alpha})`;
+        ctx.lineWidth = width / view.scale;
         ctx.stroke();
       });
     }
@@ -671,31 +1025,63 @@ function initVisualization() {
     cables.forEach(c => {
       const r = nodeRadius(c);
       const color = nodeColor(c);
+      const isHovered = hoveredCable === c;
 
-      let pulseR = r;
-      let pulseAlpha = 0;
-      if (layerState.fragility && c.fragile) {
-        const phase = (t * 0.02 + c.id * 0.3) % (Math.PI * 2);
-        pulseR = r + 3 + Math.sin(phase) * 3 + 3;
-        pulseAlpha = (Math.sin(phase) * 0.5 + 0.5) * 0.4;
+      const baseProgress = staggeredProgress('base', c.appearDelay);
+      if (baseProgress <= 0.001) return;
+
+      const drawR = r * (0.4 + 0.6 * baseProgress);
+      const nodeAlpha = baseProgress;
+
+      // FRAGILITY pulse
+      const fragVal = currentLayerValue('fragility');
+      if (fragVal > 0.001 && c.fragile) {
+        const pulseProgress = staggeredProgress('fragility', c.appearDelay);
+        if (pulseProgress > 0.001) {
+          const phase = (t * 0.02 + c.id * 0.3) % (Math.PI * 2);
+          const pulseR = (r + 3 + Math.sin(phase) * 3 + 3) * (0.5 + 0.5 * pulseProgress);
+          const pulseAlpha = (Math.sin(phase) * 0.5 + 0.5) * 0.5 * pulseProgress;
+          ctx.beginPath();
+          ctx.arc(c.x, c.y, pulseR, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(214, 169, 31, ${pulseAlpha})`;
+          ctx.lineWidth = 1.2 / view.scale;
+          ctx.stroke();
+        }
+      }
+
+      if (isHovered) {
         ctx.beginPath();
-        ctx.arc(c.x, c.y, pulseR, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(255, 209, 102, ${pulseAlpha})`;
-        ctx.lineWidth = 1.2;
+        ctx.arc(c.x, c.y, drawR + 4 / view.scale, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(20,24,28,0.35)';
+        ctx.lineWidth = 1.2 / view.scale;
         ctx.stroke();
       }
 
       ctx.beginPath();
-      ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
-      ctx.fillStyle = color;
+      ctx.arc(c.x, c.y, drawR, 0, Math.PI * 2);
+      ctx.fillStyle = colorWithAlpha(color, nodeAlpha);
       ctx.fill();
     });
+
+    ctx.restore();
 
     requestAnimationFrame(frame);
   }
   frame();
+}
 
-  window.dispatchEvent(new Event('scroll'));
+function colorWithAlpha(color, alpha) {
+  if (color.startsWith('rgba')) {
+    const parts = color.match(/[\d.]+/g).map(Number);
+    return `rgba(${parts[0]}, ${parts[1]}, ${parts[2]}, ${parts[3] * alpha})`;
+  }
+  if (color.startsWith('#')) {
+    const r = parseInt(color.slice(1,3), 16);
+    const g = parseInt(color.slice(3,5), 16);
+    const b = parseInt(color.slice(5,7), 16);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  }
+  return color;
 }
 </script>
 
