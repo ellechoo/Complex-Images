@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Undersea / Layers of the Network</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <style>
   :root {
     --abyss: #0a1218;
@@ -359,54 +360,7 @@
 
 <script>
 // ---------------------------------------------------------
-// SAMPLE DATA — replace with real cables_summary.csv data
-// ---------------------------------------------------------
-const OWNER_COLORS = {
-  "Google": "#ff6b4a",
-  "Meta": "#5b8cff",
-  "China Telecom Group": "#ff4a6b",
-  "Orange": "#ff9f4a",
-  "Telxius": "#4affc9",
-  "SubCom Consortium": "#c9a87c",
-  "NTT": "#ffd166",
-  "Other / Mixed Consortium": "#8b7fd6"
-};
-const OWNERS = Object.keys(OWNER_COLORS);
-
-function makeCables(n) {
-  const cables = [];
-  for (let i = 0; i < n; i++) {
-    const age = Math.random(); // 0 = new, 1 = old (1990s)
-    cables.push({
-      id: i,
-      name: "Cable " + i,
-      owner: OWNERS[Math.floor(Math.random() * OWNERS.length)],
-      age: age,
-      length: Math.random(), // 0 = short, 1 = transoceanic
-      fragile: Math.random() < 0.18,
-      // base position: gentle ring layout
-      angle: (i / n) * Math.PI * 2 + Math.random() * 0.3,
-      radiusBase: 0.25 + Math.random() * 0.15,
-      x: 0, y: 0,
-      vx: 0, vy: 0
-    });
-  }
-  // a sparse set of links between nodes (for length layer)
-  const links = [];
-  for (let i = 0; i < n; i++) {
-    const linkCount = 1 + Math.floor(Math.random() * 2);
-    for (let j = 0; j < linkCount; j++) {
-      const target = Math.floor(Math.random() * n);
-      if (target !== i) links.push({ a: i, b: target, length: Math.random() });
-    }
-  }
-  return { cables, links };
-}
-
-const { cables, links } = makeCables(160);
-
-// ---------------------------------------------------------
-// CANVAS SETUP
+// CANVAS SETUP (can run immediately, doesn't need data)
 // ---------------------------------------------------------
 const canvas = document.getElementById('viz');
 const ctx = canvas.getContext('2d');
@@ -491,28 +445,172 @@ window.addEventListener('scroll', () => {
 });
 
 // ---------------------------------------------------------
+// DATA LOADING
+// ---------------------------------------------------------
+let cables = [];
+let links = [];
+
+// A fixed palette to assign to the most common owners.
+// "Other" (everything past the top N) gets a muted shared color.
+const PALETTE = [
+  "#ff6b4a", // signal
+  "#4a8c7c", // kelp
+  "#8b7fd6", // violet
+  "#ffd166", // gold
+  "#5b8cff", // blue
+  "#ff4a9e", // pink
+  "#7fffd4", // aqua
+  "#ffb347", // orange
+  "#c9a87c", // copper
+  "#a3ff7f"  // green
+];
+const OTHER_COLOR = "rgba(232,236,234,0.35)";
+const TOP_N_OWNERS = PALETTE.length;
+
+let OWNER_COLORS = {}; // filled in after data loads
+
+// --- parsing helpers ---
+function parseLength(str) {
+  if (!str) return NaN;
+  const cleaned = String(str).replace(/,/g, '').replace(/km/i, '').trim();
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? NaN : n;
+}
+
+function parseYear(str) {
+  if (!str) return NaN;
+  const match = String(str).match(/\d{4}/);
+  return match ? parseInt(match[0]) : NaN;
+}
+
+const COMMON_COUNTRIES = new Set([
+  'United States','Australia','Brazil','Greece','Israel','Italy','Jordan',
+  'China','Japan','France','United Kingdom','India','Indonesia','Canada',
+  'Mexico','Spain','Portugal','Germany','Norway','Marshall Islands','Tanzania',
+  'Kenya','South Africa','Egypt','Saudi Arabia','UAE','Singapore','Malaysia',
+  'Philippines','Vietnam','Thailand','New Zealand','Chile','Argentina','Peru'
+]);
+
+Papa.parse('data/cables_summary.csv', {
+  download: true,
+  header: true,
+  complete: (results) => {
+    const rows = results.data.filter(r => r.name);
+
+    // --- normalize age from rfs_date ---
+    const years = rows.map(r => parseYear(r.rfs_date)).filter(y => !isNaN(y));
+    const minYear = Math.min(...years);
+    const maxYear = Math.max(...years);
+
+    // --- normalize length ---
+    const lengths = rows.map(r => parseLength(r.length)).filter(l => !isNaN(l));
+    const minLen = Math.min(...lengths);
+    const maxLen = Math.max(...lengths);
+    const avgLenNorm = 0.3; // fallback for missing/planned cables
+
+    // --- count owner frequency to build dynamic palette ---
+    const ownerCounts = {};
+    rows.forEach(r => {
+      const primary = (r.owners || '').split(',')[0].trim();
+      if (!primary) return;
+      ownerCounts[primary] = (ownerCounts[primary] || 0) + 1;
+    });
+    const topOwners = Object.entries(ownerCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, TOP_N_OWNERS)
+      .map(([name]) => name);
+
+    topOwners.forEach((name, i) => {
+      OWNER_COLORS[name] = PALETTE[i % PALETTE.length];
+    });
+
+    function getOwnerColor(primaryOwner) {
+      return OWNER_COLORS[primaryOwner] || OTHER_COLOR;
+    }
+
+    // --- build cable objects ---
+    cables = rows.map((r, i) => {
+      const year = parseYear(r.rfs_date);
+      const age = isNaN(year)
+        ? 0.5
+        : 1 - (year - minYear) / (maxYear - minYear || 1);
+
+      const len = parseLength(r.length);
+      const lengthNorm = isNaN(len)
+        ? avgLenNorm
+        : (len - minLen) / (maxLen - minLen || 1);
+
+      const ownerList = (r.owners || '').split(',').map(s => s.trim()).filter(Boolean);
+      const primaryOwner = ownerList[0] || 'Unknown';
+
+      const landingTokens = (r.landing_points || '')
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean);
+
+      return {
+        id: i,
+        name: r.name,
+        owner: r.owners || '',
+        primaryOwner: primaryOwner,
+        ownerColor: getOwnerColor(primaryOwner),
+        age: age,
+        length: lengthNorm,
+        isPlanned: r.is_planned === 'True',
+        fragile: Math.random() < 0.18, // placeholder until real fault data exists
+        landingTokens: landingTokens,
+        angle: (i / rows.length) * Math.PI * 2 + Math.random() * 0.3,
+        radiusBase: 0.25 + Math.random() * 0.15,
+        x: 0, y: 0
+      };
+    });
+
+    // --- build links: connect cables sharing a specific (non-country) landing token ---
+    links = [];
+    const maxLinks = cables.length * 2;
+    outer:
+    for (let i = 0; i < cables.length; i++) {
+      for (let j = i + 1; j < cables.length; j++) {
+        const shared = cables[i].landingTokens.some(t =>
+          t && !COMMON_COUNTRIES.has(t) && cables[j].landingTokens.includes(t)
+        );
+        if (shared) {
+          links.push({ a: i, b: j, length: (cables[i].length + cables[j].length) / 2 });
+          if (links.length >= maxLinks) break outer;
+        }
+      }
+    }
+
+    initVisualization();
+  },
+  error: (err) => {
+    console.error('Failed to load cables_summary.csv:', err);
+  }
+});
+
+// ---------------------------------------------------------
 // PHYSICS-ISH LAYOUT
-// position is recomputed each frame based on active layers
 // ---------------------------------------------------------
 function targetPosition(c, w, h) {
   const minDim = Math.min(w, h);
   let r = minDim * c.radiusBase;
 
-  // AGE layer: older cables drift outward
   if (layerState.age) {
     r += c.age * minDim * 0.28;
   }
 
-  // OWNER layer: cluster by owner angle offset
   let angle = c.angle;
   if (layerState.owner) {
-    const ownerIndex = OWNERS.indexOf(c.owner);
-    const clusterAngle = (ownerIndex / OWNERS.length) * Math.PI * 2;
-    angle = clusterAngle + (angle % (Math.PI * 2 / OWNERS.length)) * 0.6;
+    const ownerNames = Object.keys(OWNER_COLORS);
+    const idx = ownerNames.indexOf(c.primaryOwner);
+    const groupCount = ownerNames.length + 1; // +1 for "Other" bucket
+    const groupIndex = idx === -1 ? ownerNames.length : idx;
+    const clusterAngle = (groupIndex / groupCount) * Math.PI * 2;
+    angle = clusterAngle + (angle % (Math.PI * 2 / groupCount)) * 0.6;
   }
 
   const x = w/2 + Math.cos(angle) * r;
-  const y = h/2 + Math.sin(angle) * r * (h / w); // slight ellipse to fit pane
+  const y = h/2 + Math.sin(angle) * r * (h / w);
 
   return { x, y };
 }
@@ -524,83 +622,81 @@ function nodeRadius(c) {
 }
 
 function nodeColor(c) {
-  if (layerState.owner) return OWNER_COLORS[c.owner];
+  if (layerState.owner) return c.ownerColor;
   return 'rgba(232,236,234,0.55)';
 }
 
-// init positions
-cables.forEach(c => {
-  const p = targetPosition(c, dims.w, dims.h);
-  c.x = p.x; c.y = p.y;
-});
-
 // ---------------------------------------------------------
-// RENDER LOOP
+// RENDER LOOP + INIT (only runs once data is loaded)
 // ---------------------------------------------------------
-let t = 0;
-function frame() {
-  t += 1;
-  ctx.clearRect(0, 0, dims.w, dims.h);
-
-  // ease positions toward target
+function initVisualization() {
   cables.forEach(c => {
-    const target = targetPosition(c, dims.w, dims.h);
-    c.x += (target.x - c.x) * 0.06;
-    c.y += (target.y - c.y) * 0.06;
+    const p = targetPosition(c, dims.w, dims.h);
+    c.x = p.x; c.y = p.y;
   });
 
-  // LINKS (length layer)
-  if (layerState.length || layerState.base) {
-    links.forEach(link => {
-      const a = cables[link.a], b = cables[link.b];
-      let alpha = 0.04;
-      let width = 0.4;
-      let color = 'rgba(201,168,124,';
-      if (layerState.length) {
-        alpha = 0.06 + link.length * 0.35;
-        width = 0.4 + link.length * 2.2;
-        color = 'rgba(139,127,214,';
-      }
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
-      ctx.strokeStyle = color + alpha + ')';
-      ctx.lineWidth = width;
-      ctx.stroke();
+  let t = 0;
+  function frame() {
+    t += 1;
+    ctx.clearRect(0, 0, dims.w, dims.h);
+
+    cables.forEach(c => {
+      const target = targetPosition(c, dims.w, dims.h);
+      c.x += (target.x - c.x) * 0.06;
+      c.y += (target.y - c.y) * 0.06;
     });
-  }
 
-  // NODES
-  cables.forEach(c => {
-    const r = nodeRadius(c);
-    const color = nodeColor(c);
-
-    // fragility pulse
-    let pulseR = r;
-    let pulseAlpha = 0;
-    if (layerState.fragility && c.fragile) {
-      const phase = (t * 0.02 + c.id * 0.3) % (Math.PI * 2);
-      pulseR = r + 3 + Math.sin(phase) * 3 + 3;
-      pulseAlpha = (Math.sin(phase) * 0.5 + 0.5) * 0.4;
-      ctx.beginPath();
-      ctx.arc(c.x, c.y, pulseR, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(255, 209, 102, ${pulseAlpha})`;
-      ctx.lineWidth = 1.2;
-      ctx.stroke();
+    // LINKS (length layer)
+    if (layerState.length || layerState.base) {
+      links.forEach(link => {
+        const a = cables[link.a], b = cables[link.b];
+        let alpha = 0.04;
+        let width = 0.4;
+        let color = 'rgba(201,168,124,';
+        if (layerState.length) {
+          alpha = 0.06 + link.length * 0.35;
+          width = 0.4 + link.length * 2.2;
+          color = 'rgba(139,127,214,';
+        }
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.strokeStyle = color + alpha + ')';
+        ctx.lineWidth = width;
+        ctx.stroke();
+      });
     }
 
-    ctx.beginPath();
-    ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
-    ctx.fillStyle = color;
-    ctx.fill();
-  });
+    // NODES
+    cables.forEach(c => {
+      const r = nodeRadius(c);
+      const color = nodeColor(c);
 
-  requestAnimationFrame(frame);
+      let pulseR = r;
+      let pulseAlpha = 0;
+      if (layerState.fragility && c.fragile) {
+        const phase = (t * 0.02 + c.id * 0.3) % (Math.PI * 2);
+        pulseR = r + 3 + Math.sin(phase) * 3 + 3;
+        pulseAlpha = (Math.sin(phase) * 0.5 + 0.5) * 0.4;
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, pulseR, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(255, 209, 102, ${pulseAlpha})`;
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+      }
+
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+    });
+
+    requestAnimationFrame(frame);
+  }
+  frame();
+
+  window.dispatchEvent(new Event('scroll'));
 }
-frame();
-
-// trigger initial scroll calc
-window.dispatchEvent(new Event('scroll'));
 </script>
 
 </body>
