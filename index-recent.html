@@ -11,11 +11,11 @@
 <style>
   :root {
     --bg: #ffffff;
-    --ink: #002191;
-    --ink-soft: rgba(0, 33, 145, 0.62);
-    --ink-faint: rgba(0, 33, 145, 0.32);
-    --line: rgba(0, 33, 145, 0.10);
-    --accent: #002191;
+    --ink: #14181c;
+    --ink-soft: rgba(20, 24, 28, 0.62);
+    --ink-faint: rgba(20, 24, 28, 0.32);
+    --line: rgba(20, 24, 28, 0.10);
+    --accent: #e0532f;
     --panel-bg: rgba(255, 255, 255, 0.85);
     --sans: 'Inter', system-ui, sans-serif;
     --display: 'Inter Tight', 'Inter', system-ui, sans-serif;
@@ -259,7 +259,7 @@
   .tooltip {
     position: fixed;
     pointer-events: none;
-    background: rgba(0, 33, 145, 0.95);
+    background: rgba(20, 24, 28, 0.92);
     border-radius: 6px;
     padding: 0.5rem 0.75rem;
     font-size: 12px;
@@ -317,8 +317,8 @@
   }
 
   .zoom-controls button:hover {
-    background: rgba(0,33,145,0.06);
-    border-color: rgba(0,33,145,0.2);
+    background: rgba(20,24,28,0.06);
+    border-color: rgba(20,24,28,0.2);
   }
 
   .zoom-controls button svg {
@@ -674,51 +674,28 @@ applyStep(0);
 let cables = [];
 let links = [];
 
-const MONO = '#002191';  // single cool dark blue for all nodes, lines, type
-const PALETTE = Array(10).fill(MONO);
-const OTHER_COLOR = MONO;
+const PALETTE = [
+  "#e0532f", "#2f8f6e", "#6c63d6", "#d6a91f", "#2f6fd6",
+  "#d6477e", "#1f9e9e", "#a8651f", "#7a3fa0", "#4f7a1f"
+];
+const OTHER_COLOR = "#b8bcc0";
 const TOP_N_OWNERS = PALETTE.length;
 
 // One distinct shape per top owner; "other/smaller owners" stays a circle,
 // so circle is reserved and not reused for any top owner.
 const SHAPES = [
-  'square', 'star7', 'diamond', 'tulip', 'star5',
-  'flower', 'pentagon', 'star4', 'triangle', 'plus'
+  'square',
+  'triangle',
+  'diamond',
+  'star4',      // 4-pointed star
+  'star5',      // 5-pointed star
+  'pentagon',
+  'hexagon',
+  'flower',     // tilted plus with rounded petal edges
+  'triangleDown',
+  'plus'
 ];
 const OTHER_SHAPE = 'circle';
-
-// Hardcoded owner → shape map. Multiple key variants cover different
-// spellings that may appear in the CSV (accents, rebrandings, abbreviations).
-const HARDCODED_SHAPES = {
-  // Google
-  'Google':                      'square',
-  // BT (British Telecom)
-  'BT':                          'star7',
-  'BT Group':                    'star7',
-  // AT&T
-  'AT&T':                        'diamond',
-  // GlobalConnect (Nordic telco)
-  'GlobalConnect':               'tulip',
-  // Telefónica — with and without accent
-  'Telefónica':                  'star5',
-  'Telefonica':                  'star5',
-  // Telkom Indonesia — parent and international subsidiary
-  'Telkom Indonesia':            'flower',
-  'PT Telkom Indonesia':         'flower',
-  'Telin':                       'flower',
-  // China Mobile
-  'China Mobile':                'pentagon',
-  'China Mobile International':  'pentagon',
-  // Arelion (formerly Telia Carrier)
-  'Arelion':                     'star4',
-  // XL Axiata / XLSmart (rebranded 2025)
-  'XL Axiata':                   'triangle',
-  'XLSmart':                     'triangle',
-  'PT XLSMART':                  'triangle',
-  // Moratelindo
-  'Moratelindo':                 'plus',
-  'PT Mora Telematika Indonesia': 'plus',
-};
 
 let OWNER_COLORS = {};
 let OWNER_SHAPES = {};
@@ -772,7 +749,7 @@ Papa.parse('data/cables_summary.csv', {
 
     topOwners.forEach((name, i) => {
       OWNER_COLORS[name] = PALETTE[i % PALETTE.length];
-      OWNER_SHAPES[name] = HARDCODED_SHAPES[name] || SHAPES[i % SHAPES.length];
+      OWNER_SHAPES[name] = SHAPES[i % SHAPES.length];
     });
 
     function getOwnerColor(primaryOwner) {
@@ -921,7 +898,10 @@ function nodeRadius(c) {
 }
 
 function nodeColor(c) {
-  return MONO;
+  const ownerVal = currentLayerValue('owner');
+  if (ownerVal <= 0.001) return 'rgba(20,24,28,0.45)';
+  // blend between neutral and owner color
+  return blendColors('rgba(20,24,28,0.45)', c.ownerColor, ownerVal);
 }
 
 function blendColors(c1, c2, t) {
@@ -1073,12 +1053,12 @@ function initVisualization() {
           const emphasized = Math.pow(link.length, 1.6);
           alpha = (0.15 + emphasized * 0.6) * progress;
           width = 0.6 + emphasized * 7;
-          color = '0,33,145';
+          color = '108,99,214';
         } else {
           const progress = staggeredProgress('base', link.appearDelay);
           alpha = 0.12 * progress;
           width = 0.8;
-          color = '0,33,145';
+          color = '20,24,28';
         }
 
         if (alpha <= 0.001) return;
@@ -1102,20 +1082,20 @@ function initVisualization() {
       if (baseProgress <= 0.001) return;
 
       const drawR = r * (0.4 + 0.6 * baseProgress);
-      const nodeAlpha = baseProgress * 0.95; // reduced opacity so overlapping nodes show through
+      const nodeAlpha = baseProgress;
 
-      // FRAGILITY pulse — red outline
+      // FRAGILITY pulse
       const fragVal = currentLayerValue('fragility');
       if (fragVal > 0.001 && c.fragile) {
         const pulseProgress = staggeredProgress('fragility', c.appearDelay);
         if (pulseProgress > 0.001) {
           const phase = (t * 0.02 + c.id * 0.3) % (Math.PI * 2);
           const pulseR = (r + 3 + Math.sin(phase) * 3 + 3) * (0.5 + 0.5 * pulseProgress);
-          const pulseAlpha = (Math.sin(phase) * 0.5 + 0.5) * 0.65 * pulseProgress;
+          const pulseAlpha = (Math.sin(phase) * 0.5 + 0.5) * 0.5 * pulseProgress;
           ctx.beginPath();
           ctx.arc(c.x, c.y, pulseR, 0, Math.PI * 2);
-          ctx.strokeStyle = `rgba(0, 33, 145, ${pulseAlpha})`;
-          ctx.lineWidth = 1.5 / view.scale;
+          ctx.strokeStyle = `rgba(214, 169, 31, ${pulseAlpha})`;
+          ctx.lineWidth = 1.2 / view.scale;
           ctx.stroke();
         }
       }
@@ -1123,7 +1103,7 @@ function initVisualization() {
       if (isHovered) {
         ctx.beginPath();
         ctx.arc(c.x, c.y, drawR + 4 / view.scale, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(0,33,145,0.4)`;
+        ctx.strokeStyle = 'rgba(20,24,28,0.35)';
         ctx.lineWidth = 1.2 / view.scale;
         ctx.stroke();
       }
@@ -1201,27 +1181,6 @@ function drawShape(ctx, shape, x, y, r) {
     case 'star5':
       drawStar(ctx, x, y, r * 1.5, r * 0.6, 5);
       break;
-
-    case 'star7':
-      drawStar(ctx, x, y, r * 1.5, r * 0.65, 7);
-      break;
-
-    case 'tulip': {
-      // Tulip: rounded head merging into a downward point.
-      // Spans y - r*1.1 (top) to y + r*1.1 (tip), centered on (x,y)
-      // so the visual footprint matches other shapes.
-      const top = y - r * 1.1;
-      const waist = y + r * 0.15;
-      const tip = y + r * 1.1;
-      const hw = r * 0.95;
-      ctx.beginPath();
-      ctx.moveTo(x - hw, waist);
-      ctx.bezierCurveTo(x - hw, top - r * 0.2, x + hw, top - r * 0.2, x + hw, waist);
-      ctx.bezierCurveTo(x + hw * 0.45, waist + r * 0.25, x + r * 0.22, waist + r * 0.5, x, tip);
-      ctx.bezierCurveTo(x - r * 0.22, waist + r * 0.5, x - hw * 0.45, waist + r * 0.25, x - hw, waist);
-      ctx.closePath();
-      break;
-    }
 
     case 'flower': {
       // 4-petal flower: 4 overlapping circles arranged in a plus pattern,
