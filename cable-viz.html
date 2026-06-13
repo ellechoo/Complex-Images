@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Undersea / Layers of the Network</title>
+<style>
+  :root {
+    --abyss: #0a1218;
+    --deep: #102530;
+    --surface: #16323d;
+    --foam: #e8ecea;
+    --signal: #ff6b4a;
+    --copper: #c9a87c;
+    --kelp: #4a8c7c;
+    --line: rgba(232, 236, 234, 0.12);
+    --mono: 'IBM Plex Mono', 'SF Mono', monospace;
+    --serif: 'Fraunces', Georgia, serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--abyss);
+    color: var(--foam);
+    font-family: var(--mono);
+    font-size: 15px;
+    line-height: 1.7;
+  }
+
+  .wrap {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    min-height: 100vh;
+  }
+
+  /* LEFT: scrolling narrative */
+  .story {
+    padding: 0 6vw;
+    z-index: 2;
+  }
+
+  .intro {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .intro .eyebrow {
+    color: var(--copper);
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    font-size: 11px;
+    margin-bottom: 1.5rem;
+  }
+
+  .intro h1 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: clamp(2.5rem, 6vw, 4.5rem);
+    line-height: 1.05;
+    margin-bottom: 1.5rem;
+    letter-spacing: -0.01em;
+  }
+
+  .intro h1 em {
+    font-style: italic;
+    color: var(--signal);
+  }
+
+  .intro p {
+    max-width: 38ch;
+    color: rgba(232,236,234,0.7);
+    font-size: 16px;
+  }
+
+  .scroll-hint {
+    margin-top: 3rem;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: rgba(232,236,234,0.4);
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .scroll-hint .arrow {
+    display: inline-block;
+    animation: bob 1.8s ease-in-out infinite;
+  }
+
+  @keyframes bob {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(4px); }
+  }
+
+  .section {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    border-bottom: 1px solid var(--line);
+    transition: opacity 0.4s ease;
+  }
+
+  .section.faded { opacity: 0.25; }
+
+  .section .tag {
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+
+  .section .tag .swatch {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+
+  .section h2 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: clamp(1.8rem, 4vw, 2.8rem);
+    margin-bottom: 1rem;
+    line-height: 1.15;
+  }
+
+  .section p {
+    max-width: 42ch;
+    color: rgba(232,236,234,0.7);
+    font-size: 15px;
+  }
+
+  .section .layer-status {
+    margin-top: 1.5rem;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--kelp);
+  }
+
+  .outro {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .outro h2 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    margin-bottom: 1rem;
+  }
+
+  .outro p {
+    max-width: 42ch;
+    color: rgba(232,236,234,0.7);
+  }
+
+  .legend {
+    margin-top: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    font-size: 12px;
+  }
+
+  .legend .item {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    color: rgba(232,236,234,0.6);
+  }
+
+  .legend .swatch {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* RIGHT: sticky visualization */
+  .viz-pane {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    border-left: 1px solid var(--line);
+    overflow: hidden;
+    background:
+      radial-gradient(ellipse at 70% 30%, rgba(74,140,124,0.08), transparent 60%),
+      var(--deep);
+  }
+
+  .viz-pane canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .hud {
+    position: absolute;
+    top: 2rem;
+    left: 2rem;
+    right: 2rem;
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: rgba(232,236,234,0.4);
+    pointer-events: none;
+  }
+
+  .hud .layers-on {
+    text-align: right;
+  }
+
+  .hud .layers-on span {
+    display: block;
+    color: var(--foam);
+    margin-top: 0.3rem;
+    transition: opacity 0.3s ease;
+  }
+
+  .hud .layers-on span.off {
+    opacity: 0.15;
+  }
+
+  /* progress rail */
+  .rail {
+    position: absolute;
+    bottom: 2rem;
+    left: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .rail .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: rgba(232,236,234,0.15);
+    transition: all 0.3s ease;
+  }
+
+  .rail .dot.active {
+    background: var(--signal);
+    transform: scale(1.4);
+  }
+
+  @media (max-width: 880px) {
+    .wrap { grid-template-columns: 1fr; }
+    .viz-pane {
+      position: relative;
+      height: 60vh;
+      order: -1;
+    }
+    .story { padding: 0 6vw; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <!-- LEFT: NARRATIVE / SCROLL SECTIONS -->
+  <div class="story">
+
+    <div class="intro">
+      <div class="eyebrow">An undersea infrastructure study</div>
+      <h1>Beneath every<br><em>click</em>, a cable.</h1>
+      <p>Roughly 500 submarine cables carry nearly all intercontinental internet traffic. This is a layered look at who owns them, when they were built, and how they connect — scroll to add layers, scroll back to remove them.</p>
+      <div class="scroll-hint"><span class="arrow">↓</span> scroll to begin</div>
+    </div>
+
+    <div class="section" data-layer="base">
+      <div class="tag"><span class="swatch" style="background:var(--copper)"></span>Layer 01 — The Network</div>
+      <h2>495 cables.<br>An unseen mesh.</h2>
+      <p>Each node here is a cable. Right now they're arranged by nothing but their own connections — a raw skeleton of the system, before ownership, age, or geography are added back in.</p>
+      <div class="layer-status">base layer always visible</div>
+    </div>
+
+    <div class="section" data-layer="owner">
+      <div class="tag"><span class="swatch" style="background:var(--signal)"></span>Layer 02 — Ownership</div>
+      <h2>A handful of names<br>own the ocean floor.</h2>
+      <p>Color now encodes the primary owner or consortium. Watch for clusters: state-backed telecoms, the Big Tech players (Google, Meta, Amazon, Microsoft), and the legacy carriers — each forms its own constellation.</p>
+      <div class="layer-status">+ ownership color added</div>
+    </div>
+
+    <div class="section" data-layer="age">
+      <div class="tag"><span class="swatch" style="background:var(--kelp)"></span>Layer 03 — Age</div>
+      <h2>Some of this wiring<br>predates the iPhone.<br>By decades.</h2>
+      <p>Node size now reflects age — older cables (some from the 1990s, still in service) grow larger and drift outward, while recent builds stay small and tight to center. The network has rings, like a tree.</p>
+      <div class="layer-status">+ age-based sizing added</div>
+    </div>
+
+    <div class="section" data-layer="length">
+      <div class="tag"><span class="swatch" style="background:#8b7fd6"></span>Layer 04 — Length &amp; Reach</div>
+      <h2>Some span an ocean.<br>Some span a strait.</h2>
+      <p>Connection lines now vary in thickness and brightness by cable length — the longest intercontinental routes glow brightest, while short regional links stay faint. Scale becomes visible, without a map.</p>
+      <div class="layer-status">+ length-weighted links added</div>
+    </div>
+
+    <div class="section" data-layer="fragility">
+      <div class="tag"><span class="swatch" style="background:#ffd166"></span>Layer 05 — Fragility</div>
+      <h2>Every cable can break.<br>Most eventually do.</h2>
+      <p>Pulsing nodes mark cables with a known history of faults or repairs — anchor drags, seismic activity, sabotage. The pulse rate is illustrative here, but built to carry real incident data.</p>
+      <div class="layer-status">+ fragility markers added</div>
+    </div>
+
+    <div class="outro">
+      <h2>All five layers,<br>at once.</h2>
+      <p>Ownership, age, reach, and risk — overlapping, the way they actually do in the world. No single layer tells the whole story. The complexity is the point.</p>
+      <div class="legend">
+        <div class="item"><span class="swatch" style="background:var(--copper)"></span>Base connections</div>
+        <div class="item"><span class="swatch" style="background:var(--signal)"></span>Ownership clusters</div>
+        <div class="item"><span class="swatch" style="background:var(--kelp)"></span>Age (size)</div>
+        <div class="item"><span class="swatch" style="background:#8b7fd6"></span>Length (link weight)</div>
+        <div class="item"><span class="swatch" style="background:#ffd166"></span>Fragility (pulse)</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- RIGHT: STICKY VISUALIZATION -->
+  <div class="viz-pane">
+    <canvas id="viz"></canvas>
+    <div class="hud">
+      <div>Cable Network<br>Prototype Data</div>
+      <div class="layers-on">
+        Active layers
+        <span data-l="base">Base</span>
+        <span data-l="owner" class="off">Ownership</span>
+        <span data-l="age" class="off">Age</span>
+        <span data-l="length" class="off">Length</span>
+        <span data-l="fragility" class="off">Fragility</span>
+      </div>
+    </div>
+    <div class="rail">
+      <div class="dot active"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ---------------------------------------------------------
+// SAMPLE DATA — replace with real cables_summary.csv data
+// ---------------------------------------------------------
+const OWNER_COLORS = {
+  "Google": "#ff6b4a",
+  "Meta": "#5b8cff",
+  "China Telecom Group": "#ff4a6b",
+  "Orange": "#ff9f4a",
+  "Telxius": "#4affc9",
+  "SubCom Consortium": "#c9a87c",
+  "NTT": "#ffd166",
+  "Other / Mixed Consortium": "#8b7fd6"
+};
+const OWNERS = Object.keys(OWNER_COLORS);
+
+function makeCables(n) {
+  const cables = [];
+  for (let i = 0; i < n; i++) {
+    const age = Math.random(); // 0 = new, 1 = old (1990s)
+    cables.push({
+      id: i,
+      name: "Cable " + i,
+      owner: OWNERS[Math.floor(Math.random() * OWNERS.length)],
+      age: age,
+      length: Math.random(), // 0 = short, 1 = transoceanic
+      fragile: Math.random() < 0.18,
+      // base position: gentle ring layout
+      angle: (i / n) * Math.PI * 2 + Math.random() * 0.3,
+      radiusBase: 0.25 + Math.random() * 0.15,
+      x: 0, y: 0,
+      vx: 0, vy: 0
+    });
+  }
+  // a sparse set of links between nodes (for length layer)
+  const links = [];
+  for (let i = 0; i < n; i++) {
+    const linkCount = 1 + Math.floor(Math.random() * 2);
+    for (let j = 0; j < linkCount; j++) {
+      const target = Math.floor(Math.random() * n);
+      if (target !== i) links.push({ a: i, b: target, length: Math.random() });
+    }
+  }
+  return { cables, links };
+}
+
+const { cables, links } = makeCables(160);
+
+// ---------------------------------------------------------
+// CANVAS SETUP
+// ---------------------------------------------------------
+const canvas = document.getElementById('viz');
+const ctx = canvas.getContext('2d');
+let W, H, CX, CY;
+
+function resize() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  W = canvas.width = rect.width * devicePixelRatio;
+  H = canvas.height = rect.height * devicePixelRatio;
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = rect.height + 'px';
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+  CX = rect.width / 2;
+  CY = rect.height / 2;
+  return { w: rect.width, h: rect.height };
+}
+let dims = resize();
+window.addEventListener('resize', () => {
+  ctx.setTransform(1,0,0,1,0,0);
+  dims = resize();
+});
+
+// ---------------------------------------------------------
+// LAYER STATE — driven by scroll
+// ---------------------------------------------------------
+const layerState = { base: true, owner: false, age: false, length: false, fragility: false };
+const layerOrder = ['base', 'owner', 'age', 'length', 'fragility'];
+
+function setLayer(name, on) {
+  layerState[name] = on;
+  document.querySelectorAll('.hud .layers-on span').forEach(el => {
+    const l = el.getAttribute('data-l');
+    el.classList.toggle('off', !layerState[l]);
+  });
+}
+
+// ---------------------------------------------------------
+// SCROLL OBSERVER — toggles layers as sections enter/leave
+// ---------------------------------------------------------
+const sections = document.querySelectorAll('.section');
+const dots = document.querySelectorAll('.rail .dot');
+
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    const layer = entry.target.getAttribute('data-layer');
+    if (entry.isIntersecting) {
+      setLayer(layer, true);
+      entry.target.classList.remove('faded');
+    }
+  });
+}, { threshold: 0.5 });
+
+sections.forEach(s => observer.observe(s));
+
+// when scrolling back up past a section, remove its layer (and later ones)
+let lastScrollY = window.scrollY;
+window.addEventListener('scroll', () => {
+  const dir = window.scrollY > lastScrollY ? 'down' : 'up';
+  lastScrollY = window.scrollY;
+
+  // figure out which sections are above the viewport midpoint
+  const mid = window.innerHeight / 2;
+  let activeIndex = -1; // -1 = intro, 0..4 = sections, 5 = outro
+  sections.forEach((s, i) => {
+    const r = s.getBoundingClientRect();
+    if (r.top < mid) activeIndex = i;
+  });
+  const outroRect = document.querySelector('.outro').getBoundingClientRect();
+  const outroActive = outroRect.top < mid;
+
+  if (outroActive) {
+    layerOrder.forEach(l => setLayer(l, true));
+  } else if (activeIndex === -1) {
+    layerOrder.forEach((l, i) => setLayer(l, i === 0));
+  } else {
+    layerOrder.forEach((l, i) => setLayer(l, i <= activeIndex));
+  }
+
+  // update rail dots
+  let dotIndex = activeIndex === -1 ? 0 : (outroActive ? 6 : activeIndex + 1);
+  dots.forEach((d, i) => d.classList.toggle('active', i === dotIndex));
+});
+
+// ---------------------------------------------------------
+// PHYSICS-ISH LAYOUT
+// position is recomputed each frame based on active layers
+// ---------------------------------------------------------
+function targetPosition(c, w, h) {
+  const minDim = Math.min(w, h);
+  let r = minDim * c.radiusBase;
+
+  // AGE layer: older cables drift outward
+  if (layerState.age) {
+    r += c.age * minDim * 0.28;
+  }
+
+  // OWNER layer: cluster by owner angle offset
+  let angle = c.angle;
+  if (layerState.owner) {
+    const ownerIndex = OWNERS.indexOf(c.owner);
+    const clusterAngle = (ownerIndex / OWNERS.length) * Math.PI * 2;
+    angle = clusterAngle + (angle % (Math.PI * 2 / OWNERS.length)) * 0.6;
+  }
+
+  const x = w/2 + Math.cos(angle) * r;
+  const y = h/2 + Math.sin(angle) * r * (h / w); // slight ellipse to fit pane
+
+  return { x, y };
+}
+
+function nodeRadius(c) {
+  let base = 1.6;
+  if (layerState.age) base += c.age * 3.5;
+  return base;
+}
+
+function nodeColor(c) {
+  if (layerState.owner) return OWNER_COLORS[c.owner];
+  return 'rgba(232,236,234,0.55)';
+}
+
+// init positions
+cables.forEach(c => {
+  const p = targetPosition(c, dims.w, dims.h);
+  c.x = p.x; c.y = p.y;
+});
+
+// ---------------------------------------------------------
+// RENDER LOOP
+// ---------------------------------------------------------
+let t = 0;
+function frame() {
+  t += 1;
+  ctx.clearRect(0, 0, dims.w, dims.h);
+
+  // ease positions toward target
+  cables.forEach(c => {
+    const target = targetPosition(c, dims.w, dims.h);
+    c.x += (target.x - c.x) * 0.06;
+    c.y += (target.y - c.y) * 0.06;
+  });
+
+  // LINKS (length layer)
+  if (layerState.length || layerState.base) {
+    links.forEach(link => {
+      const a = cables[link.a], b = cables[link.b];
+      let alpha = 0.04;
+      let width = 0.4;
+      let color = 'rgba(201,168,124,';
+      if (layerState.length) {
+        alpha = 0.06 + link.length * 0.35;
+        width = 0.4 + link.length * 2.2;
+        color = 'rgba(139,127,214,';
+      }
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.strokeStyle = color + alpha + ')';
+      ctx.lineWidth = width;
+      ctx.stroke();
+    });
+  }
+
+  // NODES
+  cables.forEach(c => {
+    const r = nodeRadius(c);
+    const color = nodeColor(c);
+
+    // fragility pulse
+    let pulseR = r;
+    let pulseAlpha = 0;
+    if (layerState.fragility && c.fragile) {
+      const phase = (t * 0.02 + c.id * 0.3) % (Math.PI * 2);
+      pulseR = r + 3 + Math.sin(phase) * 3 + 3;
+      pulseAlpha = (Math.sin(phase) * 0.5 + 0.5) * 0.4;
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, pulseR, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255, 209, 102, ${pulseAlpha})`;
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+    }
+
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+  });
+
+  requestAnimationFrame(frame);
+}
+frame();
+
+// trigger initial scroll calc
+window.dispatchEvent(new Event('scroll'));
+</script>
+
+</body>
+</html>
