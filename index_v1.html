@@ -9,6 +9,56 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
+
+  /* VERSION TOGGLE - top left */
+.version-toggle {
+  position: fixed;
+  top: 1.5rem;
+  left: 1.5rem;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: var(--panel-bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.4rem 0.6rem;
+  backdrop-filter: blur(6px);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-soft);
+  pointer-events: auto;
+  transition: border-color 0.2s;
+}
+.version-toggle:hover {
+  border-color: rgba(0,33,145,0.2);
+}
+.version-toggle .sep {
+  color: var(--ink-faint);
+  font-weight: 400;
+}
+.version-toggle .v {
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  transition: background 0.2s, color 0.2s;
+  cursor: pointer;
+  text-decoration: none;
+  color: var(--ink-soft);
+}
+.version-toggle .v.active {
+  background: var(--ink);
+  color: #fff;
+  pointer-events: none;
+}
+.version-toggle .v:not(.active):hover {
+  background: rgba(0,33,145,0.06);
+  color: var(--ink);
+}
+.version-toggle a {
+  text-decoration: none;
+}
+
+
   :root {
     --bg: #ffffff;
     --ink: #002191;
@@ -362,6 +412,13 @@
 </style>
 </head>
 <body>
+
+  //toggle
+  <div class="version-toggle">
+  <a href="index_v1.html" class="v active">V1</a>
+  <span class="sep">/</span>
+  <a href="index_v2.html" class="v">V2</a>
+</div>
 
 <div class="scroll-driver"></div>
 
