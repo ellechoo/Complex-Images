@@ -1036,10 +1036,10 @@ function geoAngleForTokens(tokens, lookup) {
 
 // Random point in a rectangle sized off the actual viewport (in world
 // units, at the scale the circle is framed at), so the starting "starry
-// sky" spread adapts to whatever window/device it's opened on. The
-// SPREAD factor makes the rectangle bigger than the visible frame, so a
-// portion of nodes start off-screen at the edges.
-const SCATTER_SPREAD = 1.6;
+// sky" spread adapts to whatever window/device it's opened on. Kept just
+// barely past 1.0 so almost every node lands in frame on load, with only
+// a touch of overflow at the very edges.
+const SCATTER_SPREAD = 1.05;
 
 function randomScatterPoint() {
   const visW = (W / viewTarget.scale) * SCATTER_SPREAD;
