@@ -629,7 +629,12 @@ let hoveredCable = null;
 let hoveredLink = null;
 
 function updateHover(e) {
-  if (isDragging || !nodes.length) {
+  // The mousemove listener is on window (needed for panning), so it still
+  // fires while the cursor sits over a UI panel like the legend -- without
+  // this check, a node/link that happens to render underneath that panel
+  // would still light up and show its tooltip. Only hit-test when the
+  // cursor is actually over the canvas itself.
+  if (isDragging || !nodes.length || e.target !== canvas) {
     hoveredCable = null;
     hoveredLink = null;
     tooltip.classList.remove('visible');
