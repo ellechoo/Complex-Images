@@ -52,6 +52,29 @@
   .version-toggle .v:not(.active):hover{background:rgba(0,33,145,.06);color:var(--ink)}
   .version-toggle a{text-decoration:none}
 
+  /* PROJECT TITLE — sits just under the version toggle, plain text (no
+     panel) to stay out of the way of the version toggle's own box. */
+  .project-title {
+    position: fixed;
+    top: 4.25rem;
+    left: 1.5rem;
+    z-index: 5;
+    pointer-events: none;
+  }
+  .project-title .project-name {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  .project-title .project-author {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--ink-faint);
+    margin-top: 0.15rem;
+  }
+
   /* Scroll driver */
   .scroll-driver {
     position: relative;
@@ -62,7 +85,9 @@
 
   /* LAYERS HUD — same glass-panel treatment as every other text box, so
      it stays readable over the canvas regardless of what's drawn behind
-     it (this was previously unstyled floating text). */
+     it. Shrinks to fit its own short labels (same natural sizing as the
+     mobile version) rather than matching desc-panel/legend-panel's fixed
+     width -- it doesn't need the extra room they do. */
   .layer-hud {
     position: fixed;
     top: 1.5rem;
@@ -70,14 +95,14 @@
     display: flex;
     flex-direction: column;
     gap: 0.5rem;
-    align-items: flex-end;
+    align-items: flex-start;
     z-index: 5;
     background: var(--panel-bg);
     border: 1px solid var(--line);
     border-radius: 8px;
     padding: 0.8rem 1rem;
     backdrop-filter: blur(6px);
-    min-width: 150px;
+    width: auto;
   }
   .layer-hud .hud-title {
     font-size: 10px;
@@ -90,7 +115,7 @@
   .layer-hud .layer-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 0.6rem;
     font-size: 12px;
     font-weight: 500;
@@ -108,7 +133,6 @@
     background: transparent;
     transition: background 0.35s ease, border-color 0.35s ease, transform 0.25s ease;
     flex-shrink: 0;
-    order: 2;
   }
   .layer-hud .layer-row.active .ring,
   .layer-hud .layer-row.always-filled .ring {
@@ -118,7 +142,7 @@
   }
 
   /* DESCRIPTION PANEL — bottom right, squarish, scrolls if the copy runs
-     longer than the box. */
+     longer than the box. Same fixed width as layer-hud and legend-panel. */
   .desc-panel {
     position: fixed;
     bottom: 1.5rem;
@@ -186,7 +210,7 @@
     font-weight: 600;
     letter-spacing: 0.15em;
     text-transform: uppercase;
-    color: var(--ink-faint);
+    color: #fff;
     display: flex;
     align-items: center;
     gap: 0.6rem;
@@ -198,7 +222,8 @@
 
   /* OWNERSHIP LEGEND — bottom left, collapsible, same pattern as v1.
      Visible from the very start (ownership isn't a separate scroll layer
-     anymore -- shapes and this legend are present throughout).
+     anymore -- shapes and this legend are present throughout). Same fixed
+     width as layer-hud and desc-panel on desktop.
      Items are hoverable/clickable to highlight matching cables+links. */
   .legend-panel {
     position: fixed;
@@ -208,7 +233,7 @@
     border: 1px solid var(--line);
     border-radius: 8px;
     font-size: 11px;
-    max-width: 220px;
+    width: 190px;
     backdrop-filter: blur(6px);
     opacity: 0;
     transform: translateY(8px);
@@ -293,7 +318,9 @@
      that), the description panel takes the bottom-center spot they used
      to occupy, the ownership legend sits stacked right above it in a
      two-column grid so every owner is visible without needing to scroll,
-     and the "scroll" hint is dropped since swiping is self-explanatory. */
+     and the "scroll" hint is dropped since swiping is self-explanatory.
+     The fixed 190px desktop width is dropped here in favor of filling
+     the available width between the 1rem side margins. */
   @media (max-width: 640px) {
     .version-toggle {
       padding: 0.35rem 0.55rem;
@@ -301,7 +328,7 @@
     }
     .layer-hud {
       padding: 0.6rem 0.8rem;
-      min-width: 0;
+      width: auto;
       gap: 0.45rem;
     }
     .layer-hud .layer-row {
@@ -315,14 +342,18 @@
       right: 1rem;
       width: auto;
       bottom: 1rem;
-      max-height: 130px;
+      /* Fixed height (not a cap) so the box is the same size on all three
+         layers regardless of how long each description is -- shorter text
+         no longer causes the box to shrink. Longer text scrolls, same
+         treatment as the desktop panel. */
+      height: 85px;
+      max-height: none;
     }
     .legend-panel {
       top: auto;
-      bottom: 7.5rem;
+      bottom: 6.75rem;
       left: 1rem;
       right: 1rem;
-      max-width: none;
       width: auto;
     }
     .legend-panel .legend-body {
@@ -352,6 +383,11 @@
   <a href="index.html" class="v active">V2</a>
 </div>
 
+<div class="project-title">
+  <div class="project-name">The Undersea Cable Network</div>
+  <div class="project-author">Created by Elle Choo</div>
+</div>
+
 <div class="scroll-hint" id="scroll-hint"><span class="arrow">↓</span> scroll</div>
 
 <div class="layer-hud" id="layer-hud">
@@ -364,15 +400,15 @@
 <div class="desc-panel" id="desc-panel">
   <div class="desc-item active" data-l="connect">
     <h3>Network</h3>
-    <p>Every cable, scattered freely, connected to the others it shares a landing point with. Shape marks its owner throughout.</p>
+    <p>Each shape is one cable, placed at random. A line means two cables share a landing point. The shape itself marks the cable's most prominent owner, shown in the legend below.</p>
   </div>
   <div class="desc-item" data-l="geo">
     <h3>Geography</h3>
-    <p>Cables settle onto a compass, positioned by the real coordinates of their landing points. North, south, east, west.</p>
+    <p>Cables move to match where they actually land: north, south, east, and west line up with the compass points around the circle. Cables with no location match get a white x and are spaced evenly instead.</p>
   </div>
   <div class="desc-item" data-l="age">
     <h3>Age</h3>
-    <p>Older cables grow larger and drift toward the outer edge. Younger cables pull inward, toward the center.</p>
+    <p>Size and distance from center both track age. Older cables are larger and sit further out; newer cables are smaller and pulled toward the middle.</p>
   </div>
 </div>
 
@@ -454,6 +490,11 @@ let isDragging = false;
 let dragStart = { x: 0, y: 0 };
 let viewStart = { x: 0, y: 0 };
 
+// The Network layer's starry-sky scatter spreads nodes well beyond the
+// WORLD_R circle used to fit Geography/Age, so it reads better a little
+// more zoomed out than the other two layers.
+const NETWORK_ZOOM_OUT = 0.82;
+
 function resetView() {
   // Fit the circle (diameter = WORLD_R * 2) inside 85% of the smaller
   // viewport dimension.
@@ -461,6 +502,15 @@ function resetView() {
   viewTarget.scale = fit / (WORLD_R * 2);
   viewTarget.x = W/2;
   viewTarget.y = H/2;
+}
+// Same as resetView(), but reapplies the Network-layer zoom-out if that's
+// the currently active layer -- used by the reset button/dblclick so a
+// manual reset doesn't snap past the layer's intended framing.
+function resetViewForCurrentLayer() {
+  resetView();
+  if (typeof currentStep !== 'undefined' && currentStep === 0) {
+    viewTarget.scale *= NETWORK_ZOOM_OUT;
+  }
 }
 resetView();
 // snap the live view to match immediately so the very first frame is
@@ -506,8 +556,8 @@ canvas.addEventListener('wheel', (e) => {
   viewTarget.scale = newScale;
 }, { passive: false });
 
-canvas.addEventListener('dblclick', resetView);
-document.getElementById('zoom-reset').addEventListener('click', resetView);
+canvas.addEventListener('dblclick', resetViewForCurrentLayer);
+document.getElementById('zoom-reset').addEventListener('click', resetViewForCurrentLayer);
 
 document.getElementById('zoom-in').addEventListener('click', () => {
   const ns = Math.min(viewTarget.scale * 1.3, 8);
@@ -710,9 +760,15 @@ function currentLayerValue(name) {
 }
 
 // ─── scroll handling ─────────────────────────────────────────────────────────
-let currentStep = 0;
+let currentStep = -1; // sentinel so the very first applyStep(0) call is treated as "entering" the Network layer
 
 function applyStep(step) {
+  // Nudge the camera a little more zoomed out on the Network layer (its
+  // scatter spreads wider than the geography/age circle), and back to
+  // normal the moment we leave it.
+  if (step === 0 && currentStep !== 0) viewTarget.scale *= NETWORK_ZOOM_OUT;
+  else if (step !== 0 && currentStep === 0) viewTarget.scale /= NETWORK_ZOOM_OUT;
+
   currentStep = step;
   setLayer('connect', true);
   PROGRESSIVE_LAYERS.forEach((l, i) => setLayer(l, step > i));
@@ -723,6 +779,7 @@ function applyStep(step) {
   descItems.forEach(el => {
     el.classList.toggle('active', el.getAttribute('data-l') === activeDesc);
   });
+
 }
 
 function recalcStep() {
