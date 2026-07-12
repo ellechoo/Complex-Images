@@ -19,8 +19,11 @@
   *{margin:0;padding:0;box-sizing:border-box}
   html,body{background:var(--bg);color:var(--ink);font-family:var(--sans);
     overflow-x:hidden}
-  canvas{display:block;width:100%;height:100%;cursor:grab;position:fixed;inset:0}
-  canvas.dragging{cursor:grabbing}
+  /* scoped to the main viz canvas by id -- a bare "canvas" tag selector here
+     would also hit the tiny legend-icon canvases created in JS and blow
+     them up to fixed, full-viewport, top-left-pinned elements */
+  #viz{display:block;width:100%;height:100%;cursor:grab;position:fixed;inset:0}
+  #viz.dragging{cursor:grabbing}
 
   /* VERSION TOGGLE */
   .version-toggle {
@@ -57,16 +60,24 @@
     pointer-events: none;
   }
 
-  /* LAYERS HUD */
+  /* LAYERS HUD — same glass-panel treatment as every other text box, so
+     it stays readable over the canvas regardless of what's drawn behind
+     it (this was previously unstyled floating text). */
   .layer-hud {
     position: fixed;
     top: 1.5rem;
     right: 1.5rem;
     display: flex;
     flex-direction: column;
-    gap: 0.55rem;
+    gap: 0.5rem;
     align-items: flex-end;
     z-index: 5;
+    background: var(--panel-bg);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 0.8rem 1rem;
+    backdrop-filter: blur(6px);
+    min-width: 150px;
   }
   .layer-hud .hud-title {
     font-size: 10px;
@@ -106,25 +117,29 @@
     transform: scale(1.05);
   }
 
-  /* DESCRIPTION PANEL */
+  /* DESCRIPTION PANEL — bottom right, squarish, scrolls if the copy runs
+     longer than the box. */
   .desc-panel {
     position: fixed;
-    bottom: 5rem;
-    left: 50%;
-    transform: translateX(-50%);
+    bottom: 1.5rem;
+    right: 1.5rem;
     background: var(--panel-bg);
     border: 1px solid var(--line);
     border-radius: 8px;
-    padding: 0.8rem 1.5rem;
+    padding: 0.9rem 1rem;
     backdrop-filter: blur(6px);
     z-index: 5;
-    max-width: 500px;
-    text-align: center;
+    width: 190px;
+    max-height: 170px;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
+  .desc-panel::-webkit-scrollbar { width: 5px; }
+  .desc-panel::-webkit-scrollbar-thumb { background: rgba(0,33,145,0.15); border-radius: 3px; }
   .desc-panel .desc-item {
     display: none;
     flex-direction: column;
-    align-items: center;
+    align-items: flex-start;
   }
   .desc-panel .desc-item.active {
     display: flex;
@@ -132,18 +147,14 @@
   .desc-panel .desc-item h3 {
     font-family: var(--display);
     font-weight: 700;
-    font-size: 14px;
+    font-size: 13px;
     margin-bottom: 0.3rem;
   }
   .desc-panel .desc-item p {
-    font-size: 12px;
+    font-size: 11.5px;
     color: var(--ink-soft);
-    max-width: 400px;
+    line-height: 1.5;
   }
-
-  .hint{
-    position:fixed;bottom:1.5rem;right:1.5rem;font-size:11px;
-    color:var(--ink-faint);font-weight:500;z-index:5}
 
   .tooltip{
     position:fixed;pointer-events:none;background:rgba(0,33,145,.95);
@@ -164,10 +175,13 @@
   .zoom-controls button:hover{background:rgba(0,33,145,.06);border-color:rgba(0,33,145,.2)}
   .zoom-controls button svg{width:15px;height:15px}
 
+  /* "scroll" indicator, only visible at step 0 -- sits above the zoom
+     controls now that the description panel has moved off-center. */
   .scroll-hint {
     position: fixed;
-    bottom: 1.5rem;
-    right: 4.5rem;
+    bottom: 5.5rem;
+    left: 50%;
+    transform: translateX(-50%);
     font-size: 11px;
     font-weight: 600;
     letter-spacing: 0.15em;
@@ -181,6 +195,149 @@
   }
   .scroll-hint .arrow{display:inline-block;animation:bob 1.8s ease-in-out infinite}
   @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(4px)}}
+
+  /* OWNERSHIP LEGEND — bottom left, collapsible, same pattern as v1.
+     Visible from the very start (ownership isn't a separate scroll layer
+     anymore -- shapes and this legend are present throughout).
+     Items are hoverable/clickable to highlight matching cables+links. */
+  .legend-panel {
+    position: fixed;
+    bottom: 1.5rem;
+    left: 1.5rem;
+    background: var(--panel-bg);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 11px;
+    max-width: 220px;
+    backdrop-filter: blur(6px);
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.4s ease, transform 0.4s ease;
+    pointer-events: none;
+    z-index: 5;
+    overflow: hidden;
+  }
+  .legend-panel.visible {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+  .legend-panel .legend-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.7rem 1rem;
+    cursor: pointer;
+    user-select: none;
+  }
+  .legend-panel .legend-title {
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--ink-faint);
+  }
+  .legend-panel .legend-toggle {
+    font-size: 12px;
+    color: var(--ink-faint);
+    transition: transform 0.3s ease;
+    line-height: 1;
+  }
+  .legend-panel.collapsed .legend-toggle { transform: rotate(-90deg); }
+  .legend-panel .legend-body {
+    padding: 0 1rem 0.8rem 1rem;
+    max-height: 260px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    transition: max-height 0.35s ease, padding 0.35s ease;
+  }
+  .legend-panel.collapsed .legend-body {
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+  .legend-panel .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: -2px -4px 0.35rem -4px;
+    padding: 2px 4px;
+    border-radius: 4px;
+    color: var(--ink-soft);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+  .legend-panel .legend-item:hover {
+    background: rgba(0,33,145,0.05);
+    color: var(--ink);
+  }
+  .legend-panel .legend-item.selected {
+    background: rgba(0,33,145,0.09);
+    color: var(--ink);
+    font-weight: 600;
+  }
+  .legend-panel .legend-item canvas {
+    display: block;
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+  }
+
+  /* MOBILE LAYOUT — the desktop layout puts a panel in all four corners
+     plus zoom controls in bottom-center, which collide on narrow screens.
+     On mobile: zoom buttons are hidden (pinch-to-zoom / touch drag cover
+     that), the description panel takes the bottom-center spot they used
+     to occupy, the ownership legend sits stacked right above it in a
+     two-column grid so every owner is visible without needing to scroll,
+     and the "scroll" hint is dropped since swiping is self-explanatory. */
+  @media (max-width: 640px) {
+    .version-toggle {
+      padding: 0.35rem 0.55rem;
+      font-size: 11px;
+    }
+    .layer-hud {
+      padding: 0.6rem 0.8rem;
+      min-width: 0;
+      gap: 0.45rem;
+    }
+    .layer-hud .layer-row {
+      font-size: 11px;
+    }
+    .zoom-controls {
+      display: none;
+    }
+    .desc-panel {
+      left: 1rem;
+      right: 1rem;
+      width: auto;
+      bottom: 1rem;
+      max-height: 130px;
+    }
+    .legend-panel {
+      top: auto;
+      bottom: 7.5rem;
+      left: 1rem;
+      right: 1rem;
+      max-width: none;
+      width: auto;
+    }
+    .legend-panel .legend-body {
+      max-height: none;
+      overflow-y: visible;
+    }
+    #legend-items {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      column-gap: 0.75rem;
+    }
+    .scroll-hint {
+      display: none;
+    }
+  }
 </style>
 </head>
 <body>
@@ -192,44 +349,32 @@
 <div class="version-toggle">
   <a href="index_v1.html" class="v">V1</a>
   <span class="sep">/</span>
-  <a href="index_v2.html" class="v active">V2</a>
+  <a href="index.html" class="v active">V2</a>
 </div>
 
 <div class="scroll-hint" id="scroll-hint"><span class="arrow">↓</span> scroll</div>
 
 <div class="layer-hud" id="layer-hud">
   <div class="hud-title">Layers</div>
-  <div class="layer-row always-filled" data-l="geo"><span class="ring"></span>Geography</div>
-  <div class="layer-row" data-l="owner"><span class="ring"></span>Ownership</div>
+  <div class="layer-row always-filled" data-l="connect"><span class="ring"></span>Network</div>
+  <div class="layer-row" data-l="geo"><span class="ring"></span>Geography</div>
   <div class="layer-row" data-l="age"><span class="ring"></span>Age</div>
-  <div class="layer-row" data-l="connect"><span class="ring"></span>Connectivity</div>
-  <div class="layer-row" data-l="density"><span class="ring"></span>Density</div>
 </div>
 
 <div class="desc-panel" id="desc-panel">
-  <div class="desc-item active" data-l="geo">
-    <h3>Geography</h3>
-    <p>Cables arranged on a compass rose based on their landing point locations.</p>
+  <div class="desc-item active" data-l="connect">
+    <h3>Network</h3>
+    <p>Every cable, scattered freely, connected to the others it shares a landing point with. Shape marks its owner throughout.</p>
   </div>
-  <div class="desc-item" data-l="owner">
-    <h3>Ownership</h3>
-    <p>Colors reveal which company owns each cable.</p>
+  <div class="desc-item" data-l="geo">
+    <h3>Geography</h3>
+    <p>Cables settle onto a compass, positioned by the real coordinates of their landing points. North, south, east, west.</p>
   </div>
   <div class="desc-item" data-l="age">
     <h3>Age</h3>
-    <p>Older cables grow larger and drift outward.</p>
-  </div>
-  <div class="desc-item" data-l="connect">
-    <h3>Connectivity</h3>
-    <p>Lines appear between cables that share landing points.</p>
-  </div>
-  <div class="desc-item" data-l="density">
-    <h3>Density</h3>
-    <p>Heat map reveals regions with high cable concentration.</p>
+    <p>Older cables grow larger and drift toward the outer edge. Younger cables pull inward, toward the center.</p>
   </div>
 </div>
-
-<div class="hint">scroll + ctrl to zoom</div>
 
 <div class="zoom-controls">
   <button id="zoom-out">−</button>
@@ -241,6 +386,16 @@
     </svg>
   </button>
   <button id="zoom-in">+</button>
+</div>
+
+<div class="legend-panel" id="legend-panel">
+  <div class="legend-header" id="legend-header">
+    <div class="legend-title">Ownership</div>
+    <div class="legend-toggle">▾</div>
+  </div>
+  <div class="legend-body">
+    <div id="legend-items"></div>
+  </div>
 </div>
 
 <div class="tooltip" id="tooltip">
@@ -263,6 +418,20 @@ const tLength = document.getElementById('t-length');
 const tLanding = document.getElementById('t-landing');
 const scrollHint = document.getElementById('scroll-hint');
 const descItems = document.querySelectorAll('.desc-item');
+const legendPanel = document.getElementById('legend-panel');
+const legendItems = document.getElementById('legend-items');
+const legendHeader = document.getElementById('legend-header');
+
+// World-space circle constants -- declared up top, before anything (like
+// resetView() below) can reference them.
+const WORLD_R = 900;
+const WORLD_CX = 0;
+const WORLD_CY = 0;
+// Age-layer radial remap: younger cables pull toward the center, older
+// ones sit further out near the geography ring, so the age gradient reads
+// as a clear radial gradient instead of everything bunching on one ring.
+const AGE_RING_MIN = WORLD_R * 0.30;
+const AGE_RING_MAX = WORLD_R * 1.02;
 
 let W = 0, H = 0;
 
@@ -286,12 +455,19 @@ let dragStart = { x: 0, y: 0 };
 let viewStart = { x: 0, y: 0 };
 
 function resetView() {
+  // Fit the circle (diameter = WORLD_R * 2) inside 85% of the smaller
+  // viewport dimension.
   const fit = Math.min(W, H) * 0.85;
-  viewTarget.scale = fit / 900;
+  viewTarget.scale = fit / (WORLD_R * 2);
   viewTarget.x = W/2;
   viewTarget.y = H/2;
 }
 resetView();
+// snap the live view to match immediately so the very first frame is
+// already correctly framed, instead of animating in from DEFAULT_SCALE
+view.x = viewTarget.x;
+view.y = viewTarget.y;
+view.scale = viewTarget.scale;
 
 canvas.addEventListener('mousedown', (e) => {
   isDragging = true;
@@ -351,12 +527,78 @@ document.getElementById('zoom-out').addEventListener('click', () => {
   viewTarget.scale = ns;
 });
 
-// ─── hover detection ─────────────────────────────────────────────────────────
+// ─── legend collapse ─────────────────────────────────────────────────────────
+legendHeader.addEventListener('click', () => {
+  legendPanel.classList.toggle('collapsed');
+});
+
+// ─── legend hover/click highlighting ─────────────────────────────────────────
+// selectedOwners = "locked" via click, checklist-style, multi-select.
+// hoveredOwnerLegend = transient preview while the mouse sits over a row.
+// The active set used for fading each frame is the union of both.
+let selectedOwners = new Set();
+let hoveredOwnerLegend = null;
+const OTHER_KEY = '__other__';
+
+function ownerKeyFor(cable) {
+  return ownerShapes[cable.primaryOwner] ? cable.primaryOwner : OTHER_KEY;
+}
+
+function attachLegendInteraction(item, key) {
+  item.addEventListener('mouseenter', () => { hoveredOwnerLegend = key; });
+  item.addEventListener('mouseleave', () => { hoveredOwnerLegend = null; });
+  item.addEventListener('click', () => {
+    if (selectedOwners.has(key)) selectedOwners.delete(key);
+    else selectedOwners.add(key);
+    item.classList.toggle('selected', selectedOwners.has(key));
+  });
+}
+
+// ─── link (connection line) hit-testing ──────────────────────────────────────
+// Links are drawn as a single quadratic curve from a -> b with control
+// point (mx,my) = midpoint pulled toward the origin. Hit-testing samples
+// that same curve and finds the closest point to the cursor.
+const LINK_HIT_SAMPLES = 14;
+
+function quadPoint(x0, y0, cx, cy, x1, y1, t) {
+  const mt = 1 - t;
+  return {
+    x: mt*mt*x0 + 2*mt*t*cx + t*t*x1,
+    y: mt*mt*y0 + 2*mt*t*cy + t*t*y1
+  };
+}
+
+function pointToSegmentDist(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1;
+  const lenSq = dx*dx + dy*dy;
+  let t = lenSq > 0 ? ((px - x1)*dx + (py - y1)*dy) / lenSq : 0;
+  t = Math.max(0, Math.min(1, t));
+  const cx = x1 + t*dx, cy = y1 + t*dy;
+  return Math.hypot(px - cx, py - cy);
+}
+
+function distanceToLink(px, py, a, b) {
+  const mx = (a.x + b.x) / 2 * 0.6, my = (a.y + b.y) / 2 * 0.6;
+  let minDist = Infinity;
+  let prev = quadPoint(a.x, a.y, mx, my, b.x, b.y, 0);
+  for (let i = 1; i <= LINK_HIT_SAMPLES; i++) {
+    const t = i / LINK_HIT_SAMPLES;
+    const cur = quadPoint(a.x, a.y, mx, my, b.x, b.y, t);
+    const d = pointToSegmentDist(px, py, prev.x, prev.y, cur.x, cur.y);
+    if (d < minDist) minDist = d;
+    prev = cur;
+  }
+  return minDist;
+}
+
+// ─── hover detection (cable + connection tooltip) ────────────────────────────
 let hoveredCable = null;
+let hoveredLink = null;
 
 function updateHover(e) {
   if (isDragging || !nodes.length) {
     hoveredCable = null;
+    hoveredLink = null;
     tooltip.classList.remove('visible');
     return;
   }
@@ -371,7 +613,9 @@ function updateHover(e) {
     if (dx*dx + dy*dy <= hitR*hitR) { found = n; break; }
   }
   hoveredCable = found;
+
   if (found) {
+    hoveredLink = null;
     tooltip.classList.add('visible');
     tooltip.style.left = e.clientX + 'px';
     tooltip.style.top = e.clientY + 'px';
@@ -379,8 +623,34 @@ function updateHover(e) {
     tOwners.innerHTML = `<strong>Owners</strong>&nbsp; ${found.owners.join(', ')}`;
     tRfs.innerHTML = found.rfs ? `<strong>RFS</strong>&nbsp; ${found.rfs}` : '';
     tLength.innerHTML = found.length ? `<strong>Length</strong>&nbsp; ${found.length}` : '';
-    const lps = found.landing_points;
+    const lps = found.landingTokens;
     tLanding.innerHTML = lps.length ? `<strong>Lands at</strong>&nbsp; ${lps.slice(0,4).join(', ')}${lps.length>4 ? ` +${lps.length-4}` : ''}` : '';
+    return;
+  }
+
+  // No node hit -- check connection lines, but only while they're visibly
+  // drawn (skip the check entirely while faded out at the very start).
+  let foundLink = null;
+  if (currentLayerValue('connect') > 0.05) {
+    const hitDist = 7 / view.scale;
+    for (const link of links) {
+      const a = nodes[link.a], b = nodes[link.b];
+      if (!a || !b) continue;
+      if (distanceToLink(mouseX, mouseY, a, b) <= hitDist) { foundLink = link; break; }
+    }
+  }
+  hoveredLink = foundLink;
+
+  if (foundLink) {
+    const a = nodes[foundLink.a], b = nodes[foundLink.b];
+    tooltip.classList.add('visible');
+    tooltip.style.left = e.clientX + 'px';
+    tooltip.style.top = e.clientY + 'px';
+    tName.textContent = 'Connection';
+    tOwners.innerHTML = `<strong>${a.name}</strong>&nbsp;↔&nbsp;<strong>${b.name}</strong>`;
+    tRfs.innerHTML = '';
+    tLength.innerHTML = '';
+    tLanding.innerHTML = 'Shares a landing point';
   } else {
     tooltip.classList.remove('visible');
   }
@@ -388,19 +658,24 @@ function updateHover(e) {
 
 canvas.addEventListener('mouseleave', () => {
   hoveredCable = null;
+  hoveredLink = null;
   tooltip.classList.remove('visible');
 });
 
 // ─── layer state ─────────────────────────────────────────────────────────────
-const layerState = { geo: true, owner: false, age: false, connect: false, density: false };
+// Order: Network (base, always on) -> Geography -> Age. Ownership is no
+// longer a separate scroll layer -- shapes and the legend are shown from
+// the very start and stay interactive throughout all three layers.
+const PROGRESSIVE_LAYERS = ['geo', 'age'];
+const LAYER_ORDER = ['connect', ...PROGRESSIVE_LAYERS];
+const TOTAL_STEPS = LAYER_ORDER.length; // 3: connect, +geo, +age
+
+const layerState = { connect: true, geo: false, age: false };
 const layerTransition = {
-  geo: { since: performance.now(), from: 0, to: 1 },
-  owner: { since: null, from: 0, to: 0 },
-  age: { since: null, from: 0, to: 0 },
-  connect: { since: null, from: 0, to: 0 },
-  density: { since: null, from: 0, to: 0 }
+  connect: { since: performance.now(), from: 0, to: 1 },
+  geo: { since: null, from: 0, to: 0 },
+  age: { since: null, from: 0, to: 0 }
 };
-const LAYER_ORDER = ['geo', 'owner', 'age', 'connect', 'density'];
 
 function setLayer(name, on) {
   if (layerState[name] === on) return;
@@ -421,30 +696,30 @@ function easeInOutCubic(x) {
   return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
 }
 
+// Slightly longer, softer transition than a typical UI fade -- makes each
+// layer feel like it's settling into place rather than snapping.
+const LAYER_DURATION = 900;
+
 function currentLayerValue(name) {
   const trans = layerTransition[name];
   if (trans.since === null) return trans.to;
-  const DURATION = 700;
   const elapsed = performance.now() - trans.since;
-  if (elapsed >= DURATION) return trans.to;
-  const t = easeInOutCubic(elapsed / DURATION);
+  if (elapsed >= LAYER_DURATION) return trans.to;
+  const t = easeInOutCubic(elapsed / LAYER_DURATION);
   return trans.from + (trans.to - trans.from) * t;
 }
 
 // ─── scroll handling ─────────────────────────────────────────────────────────
-const TOTAL_STEPS = 5;
 let currentStep = 0;
 
 function applyStep(step) {
   currentStep = step;
-  setLayer('geo', true);
-  ['owner', 'age', 'connect', 'density'].forEach((l, i) => {
-    setLayer(l, step > i);
-  });
+  setLayer('connect', true);
+  PROGRESSIVE_LAYERS.forEach((l, i) => setLayer(l, step > i));
 
   scrollHint.style.opacity = step === 0 ? '1' : '0';
 
-  let activeDesc = LAYER_ORDER[step] || 'geo';
+  let activeDesc = LAYER_ORDER[step] || 'connect';
   descItems.forEach(el => {
     el.classList.toggle('active', el.getAttribute('data-l') === activeDesc);
   });
@@ -470,13 +745,187 @@ document.querySelectorAll('.layer-hud .layer-row').forEach((row, idx) => {
 
 applyStep(0);
 
+// ─── ownership shapes — same set v1 used ────────────────────────────────────
+// Every node is drawn in the same ink blue as the rest of the site; only
+// the shape changes per owner, never the color. Shapes (and the legend)
+// are shown from the very first frame -- no separate "reveal" layer.
+const OWNER_COLOR = '#002191';
+
+const SHAPES = [
+  'square', 'star7', 'diamond', 'tulip', 'star5',
+  'flower', 'pentagon', 'star4', 'triangle', 'plus'
+];
+const OTHER_SHAPE = 'circle';
+
+const HARDCODED_SHAPES = {
+  'Google':                      'square',
+  'BT':                          'pentagon',
+  'BT Group':                    'pentagon',
+  'AT&T':                        'diamond',
+  'GlobalConnect':               'tulip',
+  'Telefónica':                  'star5',
+  'Telefonica':                  'star5',
+  'Telkom Indonesia':            'star4',
+  'PT Telkom Indonesia':         'star4',
+  'Telin':                       'star4',
+  'China Mobile':                'pentagon',
+  'China Mobile International':  'pentagon',
+  'Arelion':                     'star4',
+  'XL Axiata':                   'triangle',
+  'XLSmart':                     'triangle',
+  'PT XLSMART':                  'triangle',
+  'Moratelindo':                 'plus',
+  'PT Mora Telematika Indonesia': 'plus',
+  'Meta':                        'diamond',
+};
+
+function drawShape(ctx, shape, x, y, r) {
+  switch (shape) {
+    case 'circle':
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      break;
+    case 'square': {
+      const s = r * 1.6;
+      ctx.beginPath();
+      ctx.rect(x - s/2, y - s/2, s, s);
+      break;
+    }
+    case 'triangle':
+      drawPolygon(ctx, x, y, r * 1.25, 3, -Math.PI/2);
+      break;
+    case 'diamond':
+      drawPolygon(ctx, x, y, r * 1.3, 4, 0);
+      break;
+    case 'pentagon':
+      drawPolygon(ctx, x, y, r * 1.2, 5, -Math.PI/2);
+      break;
+    case 'star4':
+      drawStar(ctx, x, y, r * 1.6, r * 0.55, 4);
+      break;
+    case 'star5':
+      drawStar(ctx, x, y, r * 1.5, r * 0.6, 5);
+      break;
+    case 'star7':
+      drawStar(ctx, x, y, r * 1.5, r * 0.65, 7);
+      break;
+    case 'tulip': {
+      const top = y - r * 1.1;
+      const waist = y + r * 0.15;
+      const tip = y + r * 1.1;
+      const hw = r * 0.95;
+      ctx.beginPath();
+      ctx.moveTo(x - hw, waist);
+      ctx.bezierCurveTo(x - hw, top - r * 0.2, x + hw, top - r * 0.2, x + hw, waist);
+      ctx.bezierCurveTo(x + hw * 0.45, waist + r * 0.25, x + r * 0.22, waist + r * 0.5, x, tip);
+      ctx.bezierCurveTo(x - r * 0.22, waist + r * 0.5, x - hw * 0.45, waist + r * 0.25, x - hw, waist);
+      ctx.closePath();
+      break;
+    }
+    case 'flower': {
+      const petalR = r * 0.62;
+      const offset = r * 0.62;
+      const rotation = Math.PI / 4;
+      ctx.beginPath();
+      for (let i = 0; i < 4; i++) {
+        const angle = rotation + i * (Math.PI / 2);
+        const cx = x + Math.cos(angle) * offset;
+        const cy = y + Math.sin(angle) * offset;
+        ctx.moveTo(cx + petalR, cy);
+        ctx.arc(cx, cy, petalR, 0, Math.PI * 2);
+      }
+      break;
+    }
+    case 'plus': {
+      const arm = r * 0.45;
+      const len = r * 1.4;
+      ctx.beginPath();
+      ctx.moveTo(x - arm, y - len);
+      ctx.lineTo(x + arm, y - len);
+      ctx.lineTo(x + arm, y - arm);
+      ctx.lineTo(x + len, y - arm);
+      ctx.lineTo(x + len, y + arm);
+      ctx.lineTo(x + arm, y + arm);
+      ctx.lineTo(x + arm, y + len);
+      ctx.lineTo(x - arm, y + len);
+      ctx.lineTo(x - arm, y + arm);
+      ctx.lineTo(x - len, y + arm);
+      ctx.lineTo(x - len, y - arm);
+      ctx.lineTo(x - arm, y - arm);
+      ctx.closePath();
+      break;
+    }
+    default:
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+  }
+}
+
+function drawPolygon(ctx, x, y, r, sides, rotation) {
+  ctx.beginPath();
+  for (let i = 0; i < sides; i++) {
+    const angle = rotation + (i / sides) * Math.PI * 2;
+    const px = x + Math.cos(angle) * r;
+    const py = y + Math.sin(angle) * r;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+}
+
+function drawStar(ctx, x, y, outerR, innerR, points) {
+  ctx.beginPath();
+  const step = Math.PI / points;
+  for (let i = 0; i < points * 2; i++) {
+    const r = i % 2 === 0 ? outerR : innerR;
+    const angle = -Math.PI/2 + i * step;
+    const px = x + Math.cos(angle) * r;
+    const py = y + Math.sin(angle) * r;
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+}
+
+function makeShapeIcon(shape, color) {
+  const size = 14;
+  const c = document.createElement('canvas');
+  c.width = size * devicePixelRatio;
+  c.height = size * devicePixelRatio;
+  c.style.width = size + 'px';
+  c.style.height = size + 'px';
+  c.style.flexShrink = '0';
+  const cctx = c.getContext('2d');
+  cctx.scale(devicePixelRatio, devicePixelRatio);
+  cctx.fillStyle = color;
+  drawShape(cctx, shape, size / 2, size / 2, size * 0.32);
+  cctx.fill();
+  return c;
+}
+
+function buildLegend() {
+  legendItems.innerHTML = '';
+  Object.entries(ownerShapes).forEach(([name, shape]) => {
+    const item = document.createElement('div');
+    item.className = 'legend-item';
+    item.appendChild(makeShapeIcon(shape, OWNER_COLOR));
+    item.appendChild(document.createTextNode(name));
+    attachLegendInteraction(item, name);
+    legendItems.appendChild(item);
+  });
+  const other = document.createElement('div');
+  other.className = 'legend-item';
+  other.appendChild(makeShapeIcon(OTHER_SHAPE, OWNER_COLOR));
+  other.appendChild(document.createTextNode('Other / smaller owners'));
+  attachLegendInteraction(other, OTHER_KEY);
+  legendItems.appendChild(other);
+}
+
 // ─── data loading ────────────────────────────────────────────────────────────
 let cables = [];
 let links = [];
 let nodes = [];
-let ownerColors = {};
-
-const COLORS = ['#002191','#1a3a8a','#2d4f7a','#3a5a6a','#4a6a5a','#5a7a4a','#6a8a3a','#7a9a2a','#8aaa1a','#9aba0a'];
+let ownerShapes = {};
 
 function parseYear(str) {
   if (!str) return NaN;
@@ -489,85 +938,202 @@ function parseLength(str) {
   return parseFloat(String(str).replace(/,/g, '').replace(/km/i, '').trim()) || NaN;
 }
 
-function getAverageLanding(landingPoints) {
-  // Simple heuristic: estimate lat/lng from landing point names
-  // This is a placeholder - in reality you'd use a geocoding service
-  // For now, we'll distribute points evenly around the circle
-  return { lat: 0, lng: 0 };
+function loadCSV(path) {
+  return new Promise((resolve, reject) => {
+    Papa.parse(path, {
+      download: true,
+      header: true,
+      complete: (results) => resolve(results.data),
+      error: reject
+    });
+  });
 }
 
-Papa.parse('data/cables_summary.csv', {
-  download: true,
-  header: true,
-  complete: (results) => {
-    const rows = results.data.filter(r => r.name);
+// name -> {lon, lat} lookup built from data/landing_points.csv
+//
+// landing_points.csv stores each point as one combined field, e.g.
+// "Klagshamn, Sweden". But cables_summary.csv's landing_points column
+// lists the same point as separate comma tokens ("Klagshamn","Sweden", or
+// for US points "Chicago","IL","United States") -- the city name always
+// comes first. So each row is indexed under both its full name AND just
+// the city portion (text before the first comma), since a lone cable
+// token like "Klagshamn" only ever matches the latter.
+function buildLandingLookup(landingRows) {
+  const map = {};
+  (landingRows || []).forEach(r => {
+    const rawName = (r.name || '').trim();
+    const lon = parseFloat(r.longitude);
+    const lat = parseFloat(r.latitude);
+    if (!rawName || isNaN(lon) || isNaN(lat)) return;
+    const full = rawName.toLowerCase();
+    const city = rawName.split(',')[0].trim().toLowerCase();
+    if (!map[full]) map[full] = { lon, lat };
+    if (city && !map[city]) map[city] = { lon, lat };
+  });
+  return map;
+}
 
-    const years = rows.map(r => parseYear(r.rfs_date)).filter(y => !isNaN(y));
-    const minYear = Math.min(...years);
-    const maxYear = Math.max(...years);
+// Latitude only spans -90..90 vs longitude's -180..180, so it's boosted
+// before the angle calc or nearly everything would bunch toward due
+// east/west and rarely reach the top or bottom of the circle. Latitude is
+// negated so that north (positive latitude) points toward the top of the
+// canvas, matching COMPASS_POINTS below (N at -PI/2, "up").
+const LAT_BOOST = 2;
 
-    const ownerCounts = {};
-    rows.forEach(r => {
-      const primary = (r.owners || '').split(',')[0].trim();
-      if (primary) ownerCounts[primary] = (ownerCounts[primary] || 0) + 1;
-    });
-    const topOwners = Object.entries(ownerCounts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10)
-      .map(([name]) => name);
+function geoAngleForTokens(tokens, lookup) {
+  let sumX = 0, sumY = 0, matched = 0;
+  tokens.forEach(t => {
+    const hit = lookup[String(t).trim().toLowerCase()];
+    if (hit) {
+      const a = Math.atan2(-hit.lat * LAT_BOOST, hit.lon);
+      sumX += Math.cos(a);
+      sumY += Math.sin(a);
+      matched++;
+    }
+  });
+  // circular mean of each matched landing point's angle -- avoids the
+  // wraparound distortion a plain lon/lat average would cause near +-180
+  return { angle: matched > 0 ? Math.atan2(sumY, sumX) : 0, matched };
+}
 
-    topOwners.forEach((name, i) => {
-      ownerColors[name] = COLORS[i % COLORS.length];
-    });
+// Random point in a rectangle sized off the actual viewport (in world
+// units, at the scale the circle is framed at), so the starting "starry
+// sky" spread adapts to whatever window/device it's opened on. The
+// SPREAD factor makes the rectangle bigger than the visible frame, so a
+// portion of nodes start off-screen at the edges.
+const SCATTER_SPREAD = 1.6;
 
-    cables = rows.map((r, i) => {
-      const year = parseYear(r.rfs_date);
-      const age = isNaN(year) ? 0.5 : 1 - (year - minYear) / (maxYear - minYear || 1);
+function randomScatterPoint() {
+  const visW = (W / viewTarget.scale) * SCATTER_SPREAD;
+  const visH = (H / viewTarget.scale) * SCATTER_SPREAD;
+  return {
+    x: WORLD_CX + (Math.random() - 0.5) * visW,
+    y: WORLD_CY + (Math.random() - 0.5) * visH
+  };
+}
 
-      const len = parseLength(r.length);
-      const lengthNorm = isNaN(len) ? 0.3 : Math.min(len / 20000, 1);
+Promise.all([
+  loadCSV('data/cables_summary.csv'),
+  loadCSV('data/landing_points.csv')
+]).then(([cableRows, landingRows]) => {
+  const rows = (cableRows || []).filter(r => r.name);
+  const landingLookup = buildLandingLookup(landingRows);
 
-      const ownerList = (r.owners || '').split(',').map(s => s.trim()).filter(Boolean);
-      const primaryOwner = ownerList[0] || 'Unknown';
+  const years = rows.map(r => parseYear(r.rfs_date)).filter(y => !isNaN(y));
+  const minYear = Math.min(...years);
+  const maxYear = Math.max(...years);
 
-      const landingTokens = (r.landing_points || '').split(',').map(s => s.trim()).filter(Boolean);
+  const ownerListsByRow = rows.map(r => (r.owners || '').split(',').map(s => s.trim()).filter(Boolean));
 
-      return {
-        id: i,
-        name: r.name,
-        owners: ownerList,
-        primaryOwner: primaryOwner,
-        ownerColor: ownerColors[primaryOwner] || '#002191',
-        age: age,
-        length: lengthNorm,
-        landingTokens: landingTokens,
-        x: 0, y: 0,
-        targetX: 0, targetY: 0,
-        appearDelay: Math.random() * 300
-      };
-    });
+  // "Most prominent" owner per cable: no per-cable ownership-stake data
+  // exists in the source, so each owner's footprint across the whole
+  // network stands in for prominence -- the co-owner that also owns the
+  // most other cables wins.
+  const footprint = {};
+  ownerListsByRow.forEach(list => {
+    list.forEach(name => { footprint[name] = (footprint[name] || 0) + 1; });
+  });
 
-    // Build links (shared landing points)
-    links = [];
-    const commonCountries = new Set(['United States','China','United Kingdom','France','Japan','Germany','Canada','Australia','India','Brazil']);
-    for (let i = 0; i < cables.length; i++) {
-      for (let j = i + 1; j < cables.length; j++) {
-        const shared = cables[i].landingTokens.some(t =>
-          t && !commonCountries.has(t) && cables[j].landingTokens.includes(t)
-        );
-        if (shared) {
-          links.push({ a: i, b: j, length: (cables[i].length + cables[j].length) / 2 });
-        }
+  function mostProminentOwner(list) {
+    if (!list.length) return 'Unknown';
+    return list.reduce((best, name) =>
+      (footprint[name] || 0) > (footprint[best] || 0) ? name : best
+    , list[0]);
+  }
+
+  const ownerCounts = {};
+  ownerListsByRow.forEach(list => {
+    const primary = mostProminentOwner(list);
+    if (primary) ownerCounts[primary] = (ownerCounts[primary] || 0) + 1;
+  });
+  const topOwners = Object.entries(ownerCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+    .map(([name]) => name);
+
+  topOwners.forEach((name, i) => {
+    ownerShapes[name] = HARDCODED_SHAPES[name] || SHAPES[i % SHAPES.length];
+  });
+
+  let unmatchedCount = 0;
+
+  cables = rows.map((r, i) => {
+    const year = parseYear(r.rfs_date);
+    const age = isNaN(year) ? 0.5 : 1 - (year - minYear) / (maxYear - minYear || 1);
+
+    const len = parseLength(r.length);
+    const lengthNorm = isNaN(len) ? 0.3 : Math.min(len / 20000, 1);
+
+    const ownerList = ownerListsByRow[i];
+    const primaryOwner = mostProminentOwner(ownerList);
+
+    const landingTokens = (r.landing_points || '').split(',').map(s => s.trim()).filter(Boolean);
+
+    // Geography-layer position: real compass angle from matched landing
+    // point coordinates, falling back to an even spread if this cable's
+    // landing points aren't found in landing_points.csv.
+    const { angle, matched } = geoAngleForTokens(landingTokens, landingLookup);
+    const finalAngle = matched > 0
+      ? angle + (Math.random() - 0.5) * 0.06
+      : (i / rows.length) * Math.PI * 2 - Math.PI / 2;
+    if (matched === 0) unmatchedCount++;
+
+    const circleBaseR = WORLD_R * (0.92 + Math.random() * 0.08);
+    const circleX = WORLD_CX + Math.cos(finalAngle) * circleBaseR;
+    const circleY = WORLD_CY + Math.sin(finalAngle) * circleBaseR;
+
+    // Network-layer position: scattered freely across the field, like
+    // stars in the sky, adapted to the current window size.
+    const scatter = randomScatterPoint();
+
+    return {
+      id: i,
+      name: r.name,
+      owners: ownerList,
+      primaryOwner: primaryOwner,
+      ownerShape: ownerShapes[primaryOwner] || OTHER_SHAPE,
+      age: age,
+      length: lengthNorm,
+      landingTokens: landingTokens,
+      rfs: r.rfs_date || '',
+      unmatched: matched === 0,
+      circleAngle: finalAngle,
+      circleBaseR: circleBaseR,
+      circleX: circleX, circleY: circleY,
+      scatterX: scatter.x, scatterY: scatter.y,
+      x: scatter.x, y: scatter.y
+    };
+  });
+
+  if (unmatchedCount > 0) {
+    console.warn(
+      `Geography layer: ${unmatchedCount} of ${rows.length} cables had no ` +
+      `landing point matched in data/landing_points.csv (expects "name", ` +
+      `"longitude", "latitude" columns) -- those were spread evenly ` +
+      `around the circle and are marked with a white x.`
+    );
+  }
+
+  // Build links (shared landing points)
+  links = [];
+  const commonCountries = new Set(['United States','China','United Kingdom','France','Japan','Germany','Canada','Australia','India','Brazil']);
+  for (let i = 0; i < cables.length; i++) {
+    for (let j = i + 1; j < cables.length; j++) {
+      const shared = cables[i].landingTokens.some(t =>
+        t && !commonCountries.has(t) && cables[j].landingTokens.includes(t)
+      );
+      if (shared) {
+        links.push({ a: i, b: j, length: (cables[i].length + cables[j].length) / 2 });
       }
     }
-
-    initVisualization();
-  },
-  error: (err) => {
-    console.error('Failed to load cables_summary.csv:', err);
-    // Fallback: generate mock data
-    generateMockData();
   }
+
+  buildLegend();
+  legendPanel.classList.add('visible');
+  initVisualization();
+}).catch((err) => {
+  console.error('Failed to load CSV data:', err);
+  generateMockData();
 });
 
 function generateMockData() {
@@ -575,86 +1141,80 @@ function generateMockData() {
   const mockCount = 100;
   cables = [];
   for (let i = 0; i < mockCount; i++) {
-    const angle = (i / mockCount) * Math.PI * 2;
-    const r = 200 + Math.random() * 400;
+    const angle = (i / mockCount) * Math.PI * 2 - Math.PI / 2;
+    const circleBaseR = WORLD_R * (0.92 + Math.random() * 0.08);
+    const scatter = randomScatterPoint();
     cables.push({
       id: i,
       name: `Cable ${i+1}`,
       owners: ['Mock Owner'],
       primaryOwner: 'Mock Owner',
-      ownerColor: '#002191',
+      ownerShape: OTHER_SHAPE,
       age: Math.random(),
       length: Math.random(),
       landingTokens: [],
-      x: 0, y: 0,
-      targetX: 0, targetY: 0,
-      appearDelay: Math.random() * 300
+      rfs: '',
+      unmatched: false,
+      circleAngle: angle,
+      circleBaseR: circleBaseR,
+      circleX: WORLD_CX + Math.cos(angle) * circleBaseR,
+      circleY: WORLD_CY + Math.sin(angle) * circleBaseR,
+      scatterX: scatter.x, scatterY: scatter.y,
+      x: scatter.x, y: scatter.y
     });
   }
+  links = [];
+  buildLegend();
+  legendPanel.classList.add('visible');
   initVisualization();
 }
 
 // ─── visualization ────────────────────────────────────────────────────────────
-const WORLD_R = 900;
-const WORLD_CX = 0;
-const WORLD_CY = 0;
-let animating = false;
-
-function getCompassAngle(cable) {
-  // Place cables on compass based on landing points
-  // North = top (angle -PI/2), East = right (0), South = bottom (PI/2), West = left (PI)
-  // Use the first landing point as a rough proxy
-  const token = cable.landingTokens[0] || '';
-  const lower = token.toLowerCase();
-
-  // Rough compass positioning based on region keywords
-  if (lower.includes('usa') || lower.includes('united states') || lower.includes('america')) {
-    if (lower.includes('west') || lower.includes('california') || lower.includes('oregon')) return -0.2;
-    if (lower.includes('east') || lower.includes('new york') || lower.includes('florida')) return 0.2;
-    return 0;
-  }
-  if (lower.includes('china') || lower.includes('japan') || lower.includes('korea') || lower.includes('taiwan')) {
-    return 0.8;
-  }
-  if (lower.includes('europe') || lower.includes('uk') || lower.includes('france') || lower.includes('germany')) {
-    return -0.8;
-  }
-  if (lower.includes('india') || lower.includes('singapore') || lower.includes('malaysia') || lower.includes('indonesia')) {
-    return 0.3;
-  }
-  if (lower.includes('brazil') || lower.includes('argentina') || lower.includes('chile')) {
-    return 1.2;
-  }
-  if (lower.includes('australia') || lower.includes('new zealand')) {
-    return -0.3;
-  }
-  if (lower.includes('africa') || lower.includes('south africa') || lower.includes('kenya') || lower.includes('nigeria')) {
-    return 0.6;
-  }
-
-  // Default: spread evenly
-  return (cable.id / cables.length) * Math.PI * 2 - Math.PI / 2;
-}
-
 function initVisualization() {
-  const N = cables.length;
-
-  cables.forEach((c, i) => {
-    const angle = getCompassAngle(c);
-    // Add some jitter to avoid perfect overlap
-    const jitter = (Math.random() - 0.5) * 0.15;
-    const finalAngle = angle + jitter;
-    const r = WORLD_R * (0.85 + Math.random() * 0.15);
-
-    c.targetX = WORLD_CX + Math.cos(finalAngle) * r;
-    c.targetY = WORLD_CY + Math.sin(finalAngle) * r;
-    c.x = c.targetX;
-    c.y = c.targetY;
-  });
-
   nodes = cables;
   applyStep(0);
   animate();
+}
+
+// ─── compass rose — minimalist N/S/E/W markers only, no ring outline ───────
+const COMPASS_POINTS = [
+  { label: 'N', angle: -Math.PI / 2 },
+  { label: 'E', angle: 0 },
+  { label: 'S', angle: Math.PI / 2 },
+  { label: 'W', angle: Math.PI },
+];
+
+function drawCompass(geoVal) {
+  if (geoVal <= 0.01) return;
+  COMPASS_POINTS.forEach(p => {
+    const innerR = WORLD_R + 8 / view.scale;
+    const outerR = WORLD_R + 16 / view.scale;
+    const ix = WORLD_CX + Math.cos(p.angle) * innerR;
+    const iy = WORLD_CY + Math.sin(p.angle) * innerR;
+    const ox = WORLD_CX + Math.cos(p.angle) * outerR;
+    const oy = WORLD_CY + Math.sin(p.angle) * outerR;
+
+    ctx.beginPath();
+    ctx.moveTo(ix, iy);
+    ctx.lineTo(ox, oy);
+    ctx.strokeStyle = `rgba(0,33,145,${0.3 * geoVal})`;
+    ctx.lineWidth = 1.2 / view.scale;
+    ctx.stroke();
+
+    const labelR = outerR + 14 / view.scale;
+    const tx = WORLD_CX + Math.cos(p.angle) * labelR;
+    const ty = WORLD_CY + Math.sin(p.angle) * labelR;
+
+    ctx.save();
+    ctx.translate(tx, ty);
+    ctx.scale(1 / view.scale, 1 / view.scale);
+    ctx.fillStyle = `rgba(0,33,145,${0.4 * geoVal})`;
+    ctx.font = '600 12px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(p.label, 0, 0);
+    ctx.restore();
+  });
 }
 
 // ─── render loop ─────────────────────────────────────────────────────────────
@@ -669,79 +1229,129 @@ function animate() {
   ctx.translate(view.x, view.y);
   ctx.scale(view.scale, view.scale);
 
-  // Get layer values
-  const geoVal = currentLayerValue('geo');
-  const ownerVal = currentLayerValue('owner');
-  const ageVal = currentLayerValue('age');
+  // Layer values
   const connectVal = currentLayerValue('connect');
-  const densityVal = currentLayerValue('density');
+  const geoVal = currentLayerValue('geo');
+  const ageVal = currentLayerValue('age');
 
-  // ── draw density heat (layer 5) ──
-  if (densityVal > 0.01) {
-    // Simple density visualization: radial gradient circles around each node
-    nodes.forEach(n => {
-      const alpha = densityVal * 0.05;
-      const grad = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, 300);
-      grad.addColorStop(0, `rgba(0,33,145,${alpha})`);
-      grad.addColorStop(1, 'rgba(0,33,145,0)');
-      ctx.fillStyle = grad;
-      ctx.beginPath();
-      ctx.arc(n.x, n.y, 300, 0, Math.PI*2);
-      ctx.fill();
-    });
-  }
+  drawCompass(geoVal);
 
-  // ── draw connections (layer 4) ──
+  // Position pass — lerp each node from its random "starry sky" scatter
+  // position toward its real-geography compass position as geoVal rises.
+  // The Age layer then remaps radius: younger cables pull in toward the
+  // center, older ones sit further out, so age reads as a clear gradient
+  // instead of everything sitting on one crowded ring.
+  nodes.forEach(n => {
+    const age = n.age || 0.5;
+    const ageTargetR = AGE_RING_MIN + age * (AGE_RING_MAX - AGE_RING_MIN);
+    const driftedR = n.circleBaseR + (ageTargetR - n.circleBaseR) * ageVal;
+    const dCircleX = WORLD_CX + Math.cos(n.circleAngle) * driftedR;
+    const dCircleY = WORLD_CY + Math.sin(n.circleAngle) * driftedR;
+    n.x = n.scatterX + (dCircleX - n.scatterX) * geoVal;
+    n.y = n.scatterY + (dCircleY - n.scatterY) * geoVal;
+  });
+
+  // active owner filter set = locked selections + whatever's hovered right now
+  const activeOwners = new Set(selectedOwners);
+  if (hoveredOwnerLegend) activeOwners.add(hoveredOwnerLegend);
+  const hasFilter = activeOwners.size > 0;
+
+  // ── draw connections ──
   if (connectVal > 0.01 && links.length > 0) {
     links.forEach(link => {
       const a = nodes[link.a], b = nodes[link.b];
       if (!a || !b) return;
-      const alpha = connectVal * 0.15;
+
+      const linkActive = hasFilter && (activeOwners.has(ownerKeyFor(a)) || activeOwners.has(ownerKeyFor(b)));
+      const targetFade = hasFilter && !linkActive ? 1 : 0;
+      const targetBoost = linkActive ? 1 : 0;
+      if (link.fadeMix === undefined) link.fadeMix = targetFade;
+      if (link.boostMix === undefined) link.boostMix = targetBoost;
+      link.fadeMix += (targetFade - link.fadeMix) * 0.15;
+      link.boostMix += (targetBoost - link.boostMix) * 0.15;
+
+      let alpha = connectVal * 0.15;
+      let width = 0.8;
+      alpha *= (1 - link.fadeMix * 0.85);
+      alpha += (Math.min(1, connectVal * 0.6) - alpha) * link.boostMix;
+      width += (1.4 - 0.8) * link.boostMix;
+
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
       const mx = (a.x + b.x) / 2 * 0.6;
       const my = (a.y + b.y) / 2 * 0.6;
       ctx.quadraticCurveTo(mx, my, b.x, b.y);
       ctx.strokeStyle = `rgba(0,33,145,${alpha})`;
-      ctx.lineWidth = 0.8 / view.scale;
+      ctx.lineWidth = width / view.scale;
       ctx.stroke();
     });
+
+    // Redraw the hovered connection on top, fully opaque, so it reads
+    // clearly above whatever else it crosses.
+    if (hoveredLink) {
+      const a = nodes[hoveredLink.a], b = nodes[hoveredLink.b];
+      if (a && b) {
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        const mx = (a.x + b.x) / 2 * 0.6;
+        const my = (a.y + b.y) / 2 * 0.6;
+        ctx.quadraticCurveTo(mx, my, b.x, b.y);
+        ctx.strokeStyle = 'rgba(0,33,145,0.9)';
+        ctx.lineWidth = 2.2 / view.scale;
+        ctx.stroke();
+      }
+    }
   }
 
   // ── draw nodes ──
-  nodes.forEach((n, i) => {
+  // Ownership shapes are shown throughout -- no separate reveal layer or
+  // crossfade; every node is always drawn as its owner's shape.
+  nodes.forEach((n) => {
     const isHov = hoveredCable === n;
     const age = n.age || 0.5;
-    const baseR = 3 + ageVal * age * 8;
-    const r = baseR * (0.3 + 0.7 * geoVal);
+    const baseR = 3 + ageVal * age * 6;
+    const introScale = 0.4 + 0.6 * connectVal; // gentle grow-in as the base layer fades in on load
+    const r = baseR * introScale;
 
-    // Owner color
-    let color = ownerVal > 0.3 ? n.ownerColor : '#002191';
-    let alpha = 0.5 + 0.5 * geoVal;
+    const targetFade = (hasFilter && !activeOwners.has(ownerKeyFor(n))) ? 1 : 0;
+    if (n.fadeMix === undefined) n.fadeMix = targetFade;
+    n.fadeMix += (targetFade - n.fadeMix) * 0.15;
+
+    let alpha = 0.55 + 0.45 * connectVal;
     if (isHov) alpha = 1;
+    alpha *= (1 - n.fadeMix * 0.88);
 
-    // Hover ring
-    if (isHov) {
+    // Outline ring -- only for a hovered node, or a node matching an
+    // active legend hover/selection filter. Nodes no longer get a
+    // persistent outline (e.g. the old always-on age ring) by default.
+    const isEmphasized = isHov || (hasFilter && activeOwners.has(ownerKeyFor(n)));
+    if (isEmphasized) {
       ctx.beginPath();
       ctx.arc(n.x, n.y, r + 6 / view.scale, 0, Math.PI*2);
-      ctx.strokeStyle = 'rgba(0,33,145,0.3)';
+      ctx.strokeStyle = isHov ? 'rgba(0,33,145,0.35)' : 'rgba(0,33,145,0.25)';
       ctx.lineWidth = 1.2 / view.scale;
       ctx.stroke();
     }
 
-    // Node
-    ctx.beginPath();
-    ctx.arc(n.x, n.y, r, 0, Math.PI*2);
-    ctx.fillStyle = color + Math.round(alpha * 255).toString(16).padStart(2, '0');
+    ctx.fillStyle = OWNER_COLOR;
+    ctx.globalAlpha = alpha;
+    drawShape(ctx, n.ownerShape || OTHER_SHAPE, n.x, n.y, r);
     ctx.fill();
+    ctx.globalAlpha = 1;
 
-    // Age ring (layer 3)
-    if (ageVal > 0.1 && age > 0.1) {
-      const ringR = r + 2 + age * 4 * ageVal;
+    // White x for cables whose landing points had no coordinate match --
+    // flags that this node's position is a fallback even-spread guess,
+    // not real geography.
+    if (n.unmatched) {
+      const s = Math.max(r * 0.5, 1.6 / view.scale);
       ctx.beginPath();
-      ctx.arc(n.x, n.y, ringR, 0, Math.PI*2);
-      ctx.strokeStyle = `rgba(0,33,145,${ageVal * 0.3})`;
-      ctx.lineWidth = 0.5 / view.scale;
+      ctx.moveTo(n.x - s, n.y - s);
+      ctx.lineTo(n.x + s, n.y + s);
+      ctx.moveTo(n.x + s, n.y - s);
+      ctx.lineTo(n.x - s, n.y + s);
+      ctx.strokeStyle = `rgba(255,255,255,${alpha})`;
+      ctx.lineWidth = Math.max(1, r * 0.28) / view.scale;
+      ctx.lineCap = 'round';
       ctx.stroke();
     }
   });
