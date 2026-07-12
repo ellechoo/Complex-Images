@@ -210,7 +210,7 @@
     font-weight: 600;
     letter-spacing: 0.15em;
     text-transform: uppercase;
-    color: #fff;
+    color: var(--ink-faint);
     display: flex;
     align-items: center;
     gap: 0.6rem;
@@ -342,16 +342,11 @@
       right: 1rem;
       width: auto;
       bottom: 1rem;
-      /* Fixed height (not a cap) so the box is the same size on all three
-         layers regardless of how long each description is -- shorter text
-         no longer causes the box to shrink. Longer text scrolls, same
-         treatment as the desktop panel. */
-      height: 85px;
-      max-height: none;
+      max-height: 130px;
     }
     .legend-panel {
       top: auto;
-      bottom: 6.75rem;
+      bottom: 7.5rem;
       left: 1rem;
       right: 1rem;
       width: auto;
@@ -381,6 +376,8 @@
   <a href="index_v1.html" class="v">V1</a>
   <span class="sep">/</span>
   <a href="index.html" class="v active">V2</a>
+  <span class="sep">/</span>
+  <a href="v2.5.html" class="v">Gallery</a>
 </div>
 
 <div class="project-title">
@@ -490,11 +487,6 @@ let isDragging = false;
 let dragStart = { x: 0, y: 0 };
 let viewStart = { x: 0, y: 0 };
 
-// The Network layer's starry-sky scatter spreads nodes well beyond the
-// WORLD_R circle used to fit Geography/Age, so it reads better a little
-// more zoomed out than the other two layers.
-const NETWORK_ZOOM_OUT = 0.82;
-
 function resetView() {
   // Fit the circle (diameter = WORLD_R * 2) inside 85% of the smaller
   // viewport dimension.
@@ -502,15 +494,6 @@ function resetView() {
   viewTarget.scale = fit / (WORLD_R * 2);
   viewTarget.x = W/2;
   viewTarget.y = H/2;
-}
-// Same as resetView(), but reapplies the Network-layer zoom-out if that's
-// the currently active layer -- used by the reset button/dblclick so a
-// manual reset doesn't snap past the layer's intended framing.
-function resetViewForCurrentLayer() {
-  resetView();
-  if (typeof currentStep !== 'undefined' && currentStep === 0) {
-    viewTarget.scale *= NETWORK_ZOOM_OUT;
-  }
 }
 resetView();
 // snap the live view to match immediately so the very first frame is
@@ -556,8 +539,8 @@ canvas.addEventListener('wheel', (e) => {
   viewTarget.scale = newScale;
 }, { passive: false });
 
-canvas.addEventListener('dblclick', resetViewForCurrentLayer);
-document.getElementById('zoom-reset').addEventListener('click', resetViewForCurrentLayer);
+canvas.addEventListener('dblclick', resetView);
+document.getElementById('zoom-reset').addEventListener('click', resetView);
 
 document.getElementById('zoom-in').addEventListener('click', () => {
   const ns = Math.min(viewTarget.scale * 1.3, 8);
@@ -760,15 +743,9 @@ function currentLayerValue(name) {
 }
 
 // ─── scroll handling ─────────────────────────────────────────────────────────
-let currentStep = -1; // sentinel so the very first applyStep(0) call is treated as "entering" the Network layer
+let currentStep = 0;
 
 function applyStep(step) {
-  // Nudge the camera a little more zoomed out on the Network layer (its
-  // scatter spreads wider than the geography/age circle), and back to
-  // normal the moment we leave it.
-  if (step === 0 && currentStep !== 0) viewTarget.scale *= NETWORK_ZOOM_OUT;
-  else if (step !== 0 && currentStep === 0) viewTarget.scale /= NETWORK_ZOOM_OUT;
-
   currentStep = step;
   setLayer('connect', true);
   PROGRESSIVE_LAYERS.forEach((l, i) => setLayer(l, step > i));
@@ -779,7 +756,6 @@ function applyStep(step) {
   descItems.forEach(el => {
     el.classList.toggle('active', el.getAttribute('data-l') === activeDesc);
   });
-
 }
 
 function recalcStep() {

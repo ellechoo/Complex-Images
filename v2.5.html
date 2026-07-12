@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Undersea / Ownership Gallery</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#ffffff; --ink:#002191; --ink-soft:rgba(0,33,145,.62);
+    --ink-faint:rgba(0,33,145,.32); --line:rgba(0,33,145,.10);
+    --panel-bg:rgba(255,255,255,.7);
+    --sans:'Inter',sans-serif; --display:'Inter Tight',sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    background: var(--bg); color: var(--ink); font-family: var(--sans);
+    margin: 0; padding: 0;
+  }
+
+  .page {
+    max-width: 1800px;
+    margin: 0 auto;
+    padding: 5.5rem 2rem 5rem;
+  }
+
+  /* VERSION TOGGLE -- identical markup/styling to V1/V2's own toggle,
+     top-left, with a third "Gallery" option added. */
+  .version-toggle {
+    position: fixed;
+    top: 1.5rem;
+    left: 1.5rem;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: var(--panel-bg);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 0.4rem 0.6rem;
+    backdrop-filter: blur(6px);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ink-soft);
+    pointer-events: auto;
+    transition: border-color 0.2s;
+  }
+  .version-toggle:hover { border-color: rgba(0,33,145,.2); }
+  .version-toggle .sep { color: var(--ink-faint); font-weight: 400; }
+  .version-toggle .v {
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    transition: background .2s, color .2s;
+    cursor: pointer;
+    text-decoration: none;
+    color: var(--ink-soft);
+  }
+  .version-toggle .v.active { background: var(--ink); color: #fff; pointer-events: none; }
+  .version-toggle .v:not(.active):hover { background: rgba(0,33,145,.06); color: var(--ink); }
+  .version-toggle a { text-decoration: none; }
+
+  /* INFO BUTTON -- collapsed state, top-right. Same glass-panel treatment
+     as the zoom-control buttons in V2. */
+  .info-btn {
+    position: fixed;
+    top: 1.5rem;
+    right: 1.5rem;
+    z-index: 6;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: var(--panel-bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background .2s, border-color .2s;
+  }
+  .info-btn:hover { background: rgba(0,33,145,.06); border-color: rgba(0,33,145,.2); }
+  .info-btn.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+
+  /* DESCRIPTION -- opens below the button, same glass-panel box, width,
+     font size and spacing as V2's own desc-panel. Collapsed by default. */
+  .page-subtitle {
+    position: fixed;
+    top: 3.9rem;
+    right: 1.5rem;
+    background: var(--panel-bg);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 0.9rem 1rem;
+    backdrop-filter: blur(6px);
+    z-index: 5;
+    width: 190px;
+    max-height: 170px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    line-height: 1.5;
+    margin: 0;
+    text-wrap: pretty;
+    opacity: 0;
+    transform: translateY(8px);
+    pointer-events: none;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+  }
+  .page-subtitle.open {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+  .page-subtitle::-webkit-scrollbar { width: 5px; }
+  .page-subtitle::-webkit-scrollbar-thumb { background: rgba(0,33,145,0.15); border-radius: 3px; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.75rem;
+  }
+  .frame {
+    position: relative;
+  }
+  .frame img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    object-fit: contain;
+    background: #fff;
+  }
+  /* Circle standing in for the old card box -- sized to roughly match the
+     network circle already drawn inside each PNG (which fills about 85%
+     of the frame). Darker than --line so it reads clearly, but kept to a
+     thin 1px stroke. */
+  .frame::before {
+    content: '';
+    position: absolute;
+    top: 6%; left: 6%; right: 6%; bottom: 6%;
+    border-radius: 50%;
+    border: 0.5px solid rgba(0,33,145,.4);
+    pointer-events: none;
+  }
+
+  @media (max-width: 640px) {
+    .page { padding: 5.5rem 1rem 3rem; }
+    .grid { grid-template-columns: repeat(2, 1fr); gap: 0.5rem; }
+    .version-toggle { padding: 0.35rem 0.55rem; font-size: 11px; }
+    .page-subtitle {
+      top: 3.9rem;
+      left: 1rem; right: 1rem;
+      width: auto;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="version-toggle">
+    <a href="index_v1.html" class="v">V1</a>
+    <span class="sep">/</span>
+    <a href="index.html" class="v">V2</a>
+    <span class="sep">/</span>
+    <a href="v2.5.html" class="v active">Gallery</a>
+  </div>
+
+  <button class="info-btn" id="info-btn" aria-label="About this page" aria-expanded="false">?</button>
+  <p class="page-subtitle" id="page-subtitle">This page showcases static snapshots of the Geography and Age layers with each of the underwater cable network's ten largest owners highlighted one at a time. Cables belonging to the selected owner are shown at full opacity with their shared-landing-point connections; every other cable is dimmed for&nbsp;context.</p>
+
+  <div class="grid" id="gallery-grid"></div>
+
+</div>
+
+<script>
+const MANIFEST = [
+  { "owner": "Google", "geo": "exports/geo_google.png", "age": "exports/age_google.png" },
+  { "owner": "Orange", "geo": "exports/geo_orange.png", "age": "exports/age_orange.png" },
+  { "owner": "BT", "geo": "exports/geo_bt.png", "age": "exports/age_bt.png" },
+  { "owner": "Meta", "geo": "exports/geo_meta.png", "age": "exports/age_meta.png" },
+  { "owner": "Telefonica", "geo": "exports/geo_telefonica.png", "age": "exports/age_telefonica.png" },
+  { "owner": "Vodafone", "geo": "exports/geo_vodafone.png", "age": "exports/age_vodafone.png" },
+  { "owner": "Telkom Indonesia", "geo": "exports/geo_telkom-indonesia.png", "age": "exports/age_telkom-indonesia.png" },
+  { "owner": "GlobalConnect", "geo": "exports/geo_globalconnect.png", "age": "exports/age_globalconnect.png" },
+  { "owner": "XLSmart", "geo": "exports/geo_xlsmart.png", "age": "exports/age_xlsmart.png" },
+  { "owner": "Liberty Networks", "geo": "exports/geo_liberty-networks.png", "age": "exports/age_liberty-networks.png" }
+];
+
+const infoBtn = document.getElementById('info-btn');
+const pageSubtitle = document.getElementById('page-subtitle');
+
+infoBtn.addEventListener('click', () => {
+  const open = pageSubtitle.classList.toggle('open');
+  infoBtn.classList.toggle('active', open);
+  infoBtn.setAttribute('aria-expanded', String(open));
+});
+
+const galleryGrid = document.getElementById('gallery-grid');
+
+function addFrame(src, owner) {
+  const frame = document.createElement('div');
+  frame.className = 'frame';
+  const img = document.createElement('img');
+  img.src = src;
+  img.alt = owner;
+  img.loading = 'lazy';
+  frame.appendChild(img);
+  galleryGrid.appendChild(frame);
+}
+
+// Geography images first, then Age -- one continuous grid (4 across on
+// desktop) so Age simply picks up wherever Geography's last row left off,
+// rather than starting its own row/section.
+MANIFEST.forEach(entry => addFrame(entry.geo, entry.owner));
+MANIFEST.forEach(entry => addFrame(entry.age, entry.owner));
+</script>
+</body>
+</html>
