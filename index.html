@@ -145,7 +145,10 @@
   }
 
   /* DESCRIPTION PANEL — bottom right, squarish, scrolls if the copy runs
-     longer than the box. Same fixed width as layer-hud and legend-panel. */
+     longer than the box. Same fixed width as layer-hud and legend-panel.
+     Structured as header (hidden on desktop) + body, mirroring
+     legend-panel, so the two can share the exact same collapsed look and
+     collapse behavior on mobile (see media query below). */
   .desc-panel {
     position: fixed;
     bottom: 1.5rem;
@@ -153,16 +156,23 @@
     background: var(--panel-bg);
     border: 1px solid var(--line);
     border-radius: 8px;
-    padding: 0.9rem 1rem;
     backdrop-filter: blur(6px);
     z-index: 5;
     width: 190px;
+    overflow: hidden;
+    transition: bottom 0.35s ease;
+  }
+  .desc-panel .desc-header {
+    display: none; /* shown only on mobile -- see media query */
+  }
+  .desc-panel .desc-body {
+    padding: 0.9rem 1rem;
     max-height: 170px;
     overflow-y: auto;
     overflow-x: hidden;
   }
-  .desc-panel::-webkit-scrollbar { width: 5px; }
-  .desc-panel::-webkit-scrollbar-thumb { background: rgba(0,33,145,0.15); border-radius: 3px; }
+  .desc-panel .desc-body::-webkit-scrollbar { width: 5px; }
+  .desc-panel .desc-body::-webkit-scrollbar-thumb { background: rgba(0,33,145,0.15); border-radius: 3px; }
   .desc-panel .desc-item {
     display: none;
     flex-direction: column;
@@ -181,11 +191,6 @@
     font-size: 11.5px;
     color: var(--ink-soft);
     line-height: 1.5;
-  }
-  /* Collapse toggle -- only shown/used on mobile (see media query below).
-     Hidden here so it never appears in the desktop layout. */
-  .desc-toggle-btn {
-    display: none;
   }
 
   .tooltip{
@@ -350,48 +355,50 @@
       right: 1rem;
       width: auto;
       bottom: 1rem;
-      /* Fixed height (not a cap) so all three layers render the same box
-         size, with scroll for overflow text. Padding-right clears the
-         collapse toggle. Collapses down to just the title row on tap. */
-      height: 64px;
-      max-height: none;
-      padding: 0.6rem 2.1rem 0.6rem 0.9rem;
-      overflow: hidden;
-      transition: height 0.3s ease;
     }
-    .desc-panel:not(.collapsed) {
-      overflow-y: auto;
-    }
-    .desc-panel.collapsed {
-      height: 40px;
-    }
-    .desc-toggle-btn {
+    .desc-panel .desc-header {
       display: flex;
-      position: absolute;
-      top: 0.55rem;
-      right: 0.7rem;
-      width: 18px;
-      height: 18px;
       align-items: center;
-      justify-content: center;
-      background: transparent;
-      border: none;
-      padding: 0;
-      color: var(--ink-faint);
-      font-size: 11px;
+      justify-content: space-between;
+      padding: 0.7rem 1rem;
       cursor: pointer;
-      transition: transform 0.3s ease;
-      z-index: 1;
+      user-select: none;
     }
-    .desc-panel.collapsed .desc-toggle-btn {
-      transform: rotate(-90deg);
+    .desc-panel .desc-title {
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--ink-faint);
+    }
+    .desc-panel .desc-toggle {
+      font-size: 12px;
+      color: var(--ink-faint);
+      transition: transform 0.3s ease;
+      line-height: 1;
+    }
+    .desc-panel.collapsed .desc-toggle { transform: rotate(-90deg); }
+    .desc-panel .desc-body {
+      padding: 0 1rem 0.8rem 1rem;
+      max-height: 130px;
+      transition: max-height 0.35s ease, padding 0.35s ease;
+    }
+    .desc-panel.collapsed .desc-body {
+      max-height: 0;
+      padding-top: 0;
+      padding-bottom: 0;
+      overflow: hidden;
+    }
+    .desc-panel .desc-item h3 {
+      display: none;
     }
     .legend-panel {
       top: auto;
-      bottom: 5.5rem;
+      bottom: 7.5rem;
       left: 1rem;
       right: 1rem;
       width: auto;
+      transition: opacity 0.4s ease, transform 0.4s ease, bottom 0.35s ease;
     }
     .legend-panel .legend-body {
       max-height: none;
@@ -437,18 +444,23 @@
 </div>
 
 <div class="desc-panel" id="desc-panel">
-  <button class="desc-toggle-btn" id="desc-toggle-btn" aria-label="Toggle description" aria-expanded="true">▾</button>
-  <div class="desc-item active" data-l="connect">
-    <h3>Network</h3>
-    <p>Each shape is one cable, placed at random. A line means two cables share a landing point. The shape itself marks the cable's most prominent owner, shown in the legend below.</p>
+  <div class="desc-header" id="desc-header">
+    <div class="desc-title" id="desc-title">Network</div>
+    <div class="desc-toggle">▾</div>
   </div>
-  <div class="desc-item" data-l="geo">
-    <h3>Geography</h3>
-    <p>Cables move to match where they actually land: north, south, east, and west line up with the compass points around the circle. Cables with no location match get a white x and are spaced evenly instead.</p>
-  </div>
-  <div class="desc-item" data-l="age">
-    <h3>Age</h3>
-    <p>Size and distance from center both track age. Older cables are larger and sit further out; newer cables are smaller and pulled toward the middle.</p>
+  <div class="desc-body">
+    <div class="desc-item active" data-l="connect">
+      <h3>Network</h3>
+      <p>Each shape is one cable, placed at random. A line means two cables share a landing point. The shape itself marks the cable's most prominent owner, shown in the legend below.</p>
+    </div>
+    <div class="desc-item" data-l="geo">
+      <h3>Geography</h3>
+      <p>Cables move to match where they actually land: north, south, east, and west line up with the compass points around the circle. Cables with no location match get a white x and are spaced evenly instead.</p>
+    </div>
+    <div class="desc-item" data-l="age">
+      <h3>Age</h3>
+      <p>Size and distance from center both track age. Older cables are larger and sit further out; newer cables are smaller and pulled toward the middle.</p>
+    </div>
   </div>
 </div>
 
@@ -494,6 +506,9 @@ const tLength = document.getElementById('t-length');
 const tLanding = document.getElementById('t-landing');
 const scrollHint = document.getElementById('scroll-hint');
 const descItems = document.querySelectorAll('.desc-item');
+const descPanel = document.getElementById('desc-panel');
+const descHeader = document.getElementById('desc-header');
+const descTitle = document.getElementById('desc-title');
 const legendPanel = document.getElementById('legend-panel');
 const legendItems = document.getElementById('legend-items');
 const legendHeader = document.getElementById('legend-header');
@@ -543,9 +558,10 @@ function resetView() {
   viewTarget.x = W/2;
   viewTarget.y = H/2;
 }
-// Same as resetView(), but reapplies the Network-layer zoom-out if that's
-// the currently active layer -- used by the reset button/dblclick so a
-// manual reset doesn't snap past the layer's intended framing.
+// Same as resetView(), but reapplies the Network-layer zoom-out/mobile
+// vertical offset if that's the currently active layer -- used by the
+// reset button/dblclick so a manual reset doesn't snap past the layer's
+// intended framing.
 function resetViewForCurrentLayer() {
   resetView();
   if (typeof currentStep !== 'undefined' && currentStep === 0) {
@@ -698,12 +714,35 @@ legendHeader.addEventListener('click', () => {
 });
 
 // ─── description panel collapse (mobile) ─────────────────────────────────────
-const descToggleBtn = document.getElementById('desc-toggle-btn');
-const descPanelEl = document.getElementById('desc-panel');
-descToggleBtn.addEventListener('click', () => {
-  const collapsed = descPanelEl.classList.toggle('collapsed');
-  descToggleBtn.setAttribute('aria-expanded', String(!collapsed));
+descHeader.addEventListener('click', () => {
+  descPanel.classList.toggle('collapsed');
+  repositionLegendAboveDesc();
 });
+
+// On mobile the legend sits stacked directly above the description panel.
+// Rather than a fixed offset (which only looked right in one collapse
+// state), compute the description panel's height from known quantities --
+// its header (measured directly, since that part never animates) plus its
+// body's max-height when expanded, 0 when collapsed -- and push the legend
+// up by exactly that much, so the gap between the two stays constant
+// whether the description is open or collapsed. Deliberately not read from
+// descPanel's own live getBoundingClientRect(): querying that immediately
+// after toggling the collapsed class would catch the box mid-transition
+// and report the state we're leaving, not the one we're headed to.
+// No-op on desktop, where the two panels sit side by side.
+const DESC_LEGEND_GAP = 12; // px, matches the tightened mobile spacing
+const MOBILE_DESC_BODY_MAX = 130; // keep in sync with .desc-panel .desc-body max-height above
+function repositionLegendAboveDesc() {
+  if (window.innerWidth > 640) {
+    legendPanel.style.bottom = '';
+    return;
+  }
+  const descBottom = parseFloat(getComputedStyle(descPanel).bottom) || 16;
+  const headerHeight = descHeader.getBoundingClientRect().height;
+  const bodyHeight = descPanel.classList.contains('collapsed') ? 0 : MOBILE_DESC_BODY_MAX;
+  legendPanel.style.bottom = (descBottom + headerHeight + bodyHeight + DESC_LEGEND_GAP) + 'px';
+}
+window.addEventListener('resize', repositionLegendAboveDesc);
 
 // ─── legend hover/click highlighting ─────────────────────────────────────────
 // selectedOwners = "locked" via click, checklist-style, multi-select.
@@ -890,17 +929,21 @@ function currentLayerValue(name) {
 // ─── scroll handling ─────────────────────────────────────────────────────────
 let currentStep = -1; // sentinel so the very first applyStep(0) call is treated as "entering" the Network layer
 
-// On narrow screens the Network layer's starting view sits low enough to
-// clear the "Created by Elle Choo" text under the version toggle. Computed
-// from the actual element so it stays correct across different phone
-// sizes and text wraps, instead of a hard-coded pixel guess.
+// On narrow screens, push the Network layer's starting view down enough
+// to clear the "Created by Elle Choo" text under the version toggle.
+// scatterHalfExtent must track randomScatterPoint()'s own math (mobile
+// uses a square min(W,H) footprint there too) so this stays accurate.
+// MIN_NUDGE guarantees a visible shift even in the rare case the text
+// already technically clears -- otherwise it can look like nothing moved.
 function networkMobileYOffset() {
   if (window.innerWidth > 640) return 0;
   const el = document.querySelector('.project-title');
-  if (!el) return 0;
-  const bottom = el.getBoundingClientRect().bottom;
-  const margin = 28;
-  return Math.max(0, (bottom + margin) - H / 2);
+  const margin = 24;
+  const MIN_NUDGE = 36;
+  const scatterHalfExtent = (Math.min(W, H) * SCATTER_SPREAD) / 2;
+  const textBottom = el ? el.getBoundingClientRect().bottom : 0;
+  const neededCenterY = textBottom + margin + scatterHalfExtent;
+  return Math.max(MIN_NUDGE, neededCenterY - H / 2);
 }
 
 function applyStep(step) {
@@ -924,8 +967,11 @@ function applyStep(step) {
 
   let activeDesc = LAYER_ORDER[step] || 'connect';
   descItems.forEach(el => {
-    el.classList.toggle('active', el.getAttribute('data-l') === activeDesc);
+    const isActive = el.getAttribute('data-l') === activeDesc;
+    el.classList.toggle('active', isActive);
+    if (isActive) descTitle.textContent = el.querySelector('h3').textContent;
   });
+  repositionLegendAboveDesc();
 }
 
 function recalcStep() {
@@ -1207,8 +1253,18 @@ function geoAngleForTokens(tokens, lookup) {
 const SCATTER_SPREAD = 1.05;
 
 function randomScatterPoint() {
-  const visW = (W / viewTarget.scale) * SCATTER_SPREAD;
-  const visH = (H / viewTarget.scale) * SCATTER_SPREAD;
+  // On tall/narrow phone screens, stretching the scatter to the full
+  // viewport height (like desktop does) fills the entire screen edge to
+  // edge -- including right behind the title text up top. On mobile the
+  // scatter uses a square footprint (min(W,H) for both axes) instead, so
+  // it naturally leaves room above/below to reposition -- see
+  // networkMobileYOffset(), which must track this same math.
+  const mobile = window.innerWidth <= 640;
+  const dim = mobile ? Math.min(W, H) : null;
+  const baseW = mobile ? dim : W;
+  const baseH = mobile ? dim : H;
+  const visW = (baseW / viewTarget.scale) * SCATTER_SPREAD;
+  const visH = (baseH / viewTarget.scale) * SCATTER_SPREAD;
   return {
     x: WORLD_CX + (Math.random() - 0.5) * visW,
     y: WORLD_CY + (Math.random() - 0.5) * visH
@@ -1333,6 +1389,7 @@ Promise.all([
 
   buildLegend();
   legendPanel.classList.add('visible');
+  repositionLegendAboveDesc();
   initVisualization();
 }).catch((err) => {
   console.error('Failed to load CSV data:', err);
@@ -1369,6 +1426,7 @@ function generateMockData() {
   links = [];
   buildLegend();
   legendPanel.classList.add('visible');
+  repositionLegendAboveDesc();
   initVisualization();
 }
 
