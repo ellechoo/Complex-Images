@@ -22,7 +22,10 @@
   /* scoped to the main viz canvas by id -- a bare "canvas" tag selector here
      would also hit the tiny legend-icon canvases created in JS and blow
      them up to fixed, full-viewport, top-left-pinned elements */
-  #viz{display:block;width:100%;height:100%;cursor:grab;position:fixed;inset:0}
+  /* touch-action:none hands single- and multi-finger gestures on the
+     canvas entirely to our own touch handlers below, instead of letting
+     the browser pinch-zoom/scroll the whole page. */
+  #viz{display:block;width:100%;height:100%;cursor:grab;position:fixed;inset:0;touch-action:none}
   #viz.dragging{cursor:grabbing}
 
   /* VERSION TOGGLE */
@@ -538,6 +541,80 @@ canvas.addEventListener('wheel', (e) => {
   viewTarget.y = mouseY - worldY * newScale;
   viewTarget.scale = newScale;
 }, { passive: false });
+
+// ─── touch: one finger pans, two fingers pinch-zoom ─────────────────────────
+// touch-action:none on #viz (see CSS) hands these gestures entirely to us,
+// so a pinch here zooms the visualization instead of the whole page.
+let touchDragging = false;
+let touchStart = { x: 0, y: 0 };
+let touchViewStart = { x: 0, y: 0 };
+let pinching = false;
+let pinchStartDist = 1;
+let pinchStartScale = 1;
+let pinchStartView = { x: 0, y: 0 };
+
+function touchDist(t0, t1) {
+  return Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+}
+function touchMid(t0, t1) {
+  return { x: (t0.clientX + t1.clientX) / 2, y: (t0.clientY + t1.clientY) / 2 };
+}
+
+canvas.addEventListener('touchstart', (e) => {
+  if (e.touches.length === 1) {
+    touchDragging = true;
+    pinching = false;
+    touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    touchViewStart = { x: view.x, y: view.y };
+  } else if (e.touches.length === 2) {
+    touchDragging = false;
+    pinching = true;
+    pinchStartDist = Math.max(touchDist(e.touches[0], e.touches[1]), 1);
+    pinchStartScale = viewTarget.scale;
+    pinchStartView = { x: viewTarget.x, y: viewTarget.y };
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  if (pinching && e.touches.length === 2) {
+    const dist = touchDist(e.touches[0], e.touches[1]);
+    const mid = touchMid(e.touches[0], e.touches[1]);
+    const rect = canvas.getBoundingClientRect();
+    const midX = mid.x - rect.left, midY = mid.y - rect.top;
+    const newScale = Math.min(Math.max(pinchStartScale * (dist / pinchStartDist), 0.2), 8);
+    const worldX = (midX - pinchStartView.x) / pinchStartScale;
+    const worldY = (midY - pinchStartView.y) / pinchStartScale;
+    viewTarget.x = midX - worldX * newScale;
+    viewTarget.y = midY - worldY * newScale;
+    viewTarget.scale = newScale;
+    // snap immediately -- pinch should track fingers 1:1, not ease in
+    view.x = viewTarget.x; view.y = viewTarget.y; view.scale = viewTarget.scale;
+  } else if (touchDragging && e.touches.length === 1) {
+    view.x = touchViewStart.x + (e.touches[0].clientX - touchStart.x);
+    view.y = touchViewStart.y + (e.touches[0].clientY - touchStart.y);
+    viewTarget.x = view.x;
+    viewTarget.y = view.y;
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchend', (e) => {
+  if (e.touches.length === 0) {
+    touchDragging = false;
+    pinching = false;
+  } else if (e.touches.length === 1) {
+    // lifted one of two fingers -- resume as a single-finger pan from here
+    pinching = false;
+    touchDragging = true;
+    touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    touchViewStart = { x: view.x, y: view.y };
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchcancel', () => {
+  touchDragging = false;
+  pinching = false;
+});
 
 canvas.addEventListener('dblclick', resetView);
 document.getElementById('zoom-reset').addEventListener('click', resetView);
