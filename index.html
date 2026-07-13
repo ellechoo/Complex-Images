@@ -182,6 +182,11 @@
     color: var(--ink-soft);
     line-height: 1.5;
   }
+  /* Collapse toggle -- only shown/used on mobile (see media query below).
+     Hidden here so it never appears in the desktop layout. */
+  .desc-toggle-btn {
+    display: none;
+  }
 
   .tooltip{
     position:fixed;pointer-events:none;background:rgba(0,33,145,.95);
@@ -213,7 +218,7 @@
     font-weight: 600;
     letter-spacing: 0.15em;
     text-transform: uppercase;
-    color: var(--ink-faint);
+    color: #fff;
     display: flex;
     align-items: center;
     gap: 0.6rem;
@@ -345,11 +350,45 @@
       right: 1rem;
       width: auto;
       bottom: 1rem;
-      max-height: 130px;
+      /* Fixed height (not a cap) so all three layers render the same box
+         size, with scroll for overflow text. Padding-right clears the
+         collapse toggle. Collapses down to just the title row on tap. */
+      height: 64px;
+      max-height: none;
+      padding: 0.6rem 2.1rem 0.6rem 0.9rem;
+      overflow: hidden;
+      transition: height 0.3s ease;
+    }
+    .desc-panel:not(.collapsed) {
+      overflow-y: auto;
+    }
+    .desc-panel.collapsed {
+      height: 40px;
+    }
+    .desc-toggle-btn {
+      display: flex;
+      position: absolute;
+      top: 0.55rem;
+      right: 0.7rem;
+      width: 18px;
+      height: 18px;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      border: none;
+      padding: 0;
+      color: var(--ink-faint);
+      font-size: 11px;
+      cursor: pointer;
+      transition: transform 0.3s ease;
+      z-index: 1;
+    }
+    .desc-panel.collapsed .desc-toggle-btn {
+      transform: rotate(-90deg);
     }
     .legend-panel {
       top: auto;
-      bottom: 7.5rem;
+      bottom: 5.5rem;
       left: 1rem;
       right: 1rem;
       width: auto;
@@ -398,6 +437,7 @@
 </div>
 
 <div class="desc-panel" id="desc-panel">
+  <button class="desc-toggle-btn" id="desc-toggle-btn" aria-label="Toggle description" aria-expanded="true">▾</button>
   <div class="desc-item active" data-l="connect">
     <h3>Network</h3>
     <p>Each shape is one cable, placed at random. A line means two cables share a landing point. The shape itself marks the cable's most prominent owner, shown in the legend below.</p>
@@ -490,6 +530,11 @@ let isDragging = false;
 let dragStart = { x: 0, y: 0 };
 let viewStart = { x: 0, y: 0 };
 
+// The Network layer's starry-sky scatter spreads nodes well beyond the
+// WORLD_R circle used to fit Geography/Age, so it reads better a little
+// more zoomed out than the other two layers.
+const NETWORK_ZOOM_OUT = 0.82;
+
 function resetView() {
   // Fit the circle (diameter = WORLD_R * 2) inside 85% of the smaller
   // viewport dimension.
@@ -497,6 +542,16 @@ function resetView() {
   viewTarget.scale = fit / (WORLD_R * 2);
   viewTarget.x = W/2;
   viewTarget.y = H/2;
+}
+// Same as resetView(), but reapplies the Network-layer zoom-out if that's
+// the currently active layer -- used by the reset button/dblclick so a
+// manual reset doesn't snap past the layer's intended framing.
+function resetViewForCurrentLayer() {
+  resetView();
+  if (typeof currentStep !== 'undefined' && currentStep === 0) {
+    viewTarget.scale *= NETWORK_ZOOM_OUT;
+    if (typeof networkMobileYOffset === 'function') viewTarget.y += networkMobileYOffset();
+  }
 }
 resetView();
 // snap the live view to match immediately so the very first frame is
@@ -616,8 +671,8 @@ canvas.addEventListener('touchcancel', () => {
   pinching = false;
 });
 
-canvas.addEventListener('dblclick', resetView);
-document.getElementById('zoom-reset').addEventListener('click', resetView);
+canvas.addEventListener('dblclick', resetViewForCurrentLayer);
+document.getElementById('zoom-reset').addEventListener('click', resetViewForCurrentLayer);
 
 document.getElementById('zoom-in').addEventListener('click', () => {
   const ns = Math.min(viewTarget.scale * 1.3, 8);
@@ -640,6 +695,14 @@ document.getElementById('zoom-out').addEventListener('click', () => {
 // ─── legend collapse ─────────────────────────────────────────────────────────
 legendHeader.addEventListener('click', () => {
   legendPanel.classList.toggle('collapsed');
+});
+
+// ─── description panel collapse (mobile) ─────────────────────────────────────
+const descToggleBtn = document.getElementById('desc-toggle-btn');
+const descPanelEl = document.getElementById('desc-panel');
+descToggleBtn.addEventListener('click', () => {
+  const collapsed = descPanelEl.classList.toggle('collapsed');
+  descToggleBtn.setAttribute('aria-expanded', String(!collapsed));
 });
 
 // ─── legend hover/click highlighting ─────────────────────────────────────────
@@ -825,9 +888,34 @@ function currentLayerValue(name) {
 }
 
 // ─── scroll handling ─────────────────────────────────────────────────────────
-let currentStep = 0;
+let currentStep = -1; // sentinel so the very first applyStep(0) call is treated as "entering" the Network layer
+
+// On narrow screens the Network layer's starting view sits low enough to
+// clear the "Created by Elle Choo" text under the version toggle. Computed
+// from the actual element so it stays correct across different phone
+// sizes and text wraps, instead of a hard-coded pixel guess.
+function networkMobileYOffset() {
+  if (window.innerWidth > 640) return 0;
+  const el = document.querySelector('.project-title');
+  if (!el) return 0;
+  const bottom = el.getBoundingClientRect().bottom;
+  const margin = 28;
+  return Math.max(0, (bottom + margin) - H / 2);
+}
 
 function applyStep(step) {
+  // Nudge the camera a little more zoomed out on the Network layer (its
+  // scatter spreads wider than the geography/age circle), push the view
+  // down a bit on mobile so it starts under the title text, and back to
+  // normal the moment we leave it.
+  if (step === 0 && currentStep !== 0) {
+    viewTarget.scale *= NETWORK_ZOOM_OUT;
+    viewTarget.y += networkMobileYOffset();
+  } else if (step !== 0 && currentStep === 0) {
+    viewTarget.scale /= NETWORK_ZOOM_OUT;
+    viewTarget.y -= networkMobileYOffset();
+  }
+
   currentStep = step;
   setLayer('connect', true);
   PROGRESSIVE_LAYERS.forEach((l, i) => setLayer(l, step > i));
